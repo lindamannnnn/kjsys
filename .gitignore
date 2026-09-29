@@ -1,0 +1,47 @@
+# ---------- 依赖 ----------
+node_modules/
+**/node_modules/
+
+# ---------- 敏感配置（务必不要提交）----------
+.env
+.env.local
+.env.*.local
+server/.env
+*.pem
+*.key
+
+# ---------- 运行数据 ----------
+data/
+server/uploads/
+*.log
+logs/
+npm-debug.log*
+yarn-error.log*
+
+# ---------- 构建产物 ----------
+dist/
+**/dist/
+unpackage/
+admin/dist/
+
+# ---------- 小程序私有配置 ----------
+miniprogram/project.private.config.json
+project.private.config.json
+
+# ---------- 编辑器 / 系统 ----------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---------- 临时文件 ----------
+*.tmp
+*.bak
+*.swp
+admin/vite.config.js.timestamp-*
+
+# ---------- 例外：需要入库的数据文件 ----------
+# 固化的配件编号数据（npm run apply:code 依赖，必须随仓库分发）
+!server/data/
+server/data/*
+!server/data/parts-code.json

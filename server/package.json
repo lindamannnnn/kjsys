@@ -1,0 +1,39 @@
+{
+  "name": "shenglong-erp-server",
+  "version": "3.0.0",
+  "private": true,
+  "description": "胜龙进销存系统后端服务（自建服务器版）",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "db:init": "node src/db/init.js",
+    "db:migrate": "node src/db/migrate-v2.js",
+    "db:seed": "node src/db/seed.js",
+    "seed:dev": "node src/db/seed-dev.js",
+    "db:reset-admin": "node src/db/reset-admin.js",
+    "import:materials": "node src/db/import-materials.js",
+    "apply:subcategory": "node src/db/apply-subcategory.js",
+    "apply:code": "node src/db/apply-material-code.js",
+    "verify": "node src/db/verify.js",
+    "test:api": "node tests/api-test.js",
+    "test:contract": "node tests/verify-frontend-contracts.js",
+    "audit:data": "node tests/data-audit.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.7",
+    "express": "^4.22.3",
+    "iconv-lite": "^0.7.3",
+    "jsonwebtoken": "^9.0.2",
+    "mime-types": "^3.0.2",
+    "mysql2": "^3.24.4",
+    "node-cron": "^3.0.3",
+    "raw-body": "^4.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

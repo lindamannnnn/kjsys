@@ -1,0 +1,144 @@
+{
+  "生成时间": "2026/9/29 17:37:47",
+  "接口地址": "http://127.0.0.1:3000",
+  "岗位账号": [
+    {
+      "姓名": "张三",
+      "岗位": "车间员工（出库员）",
+      "账号": "zhangshan",
+      "密码": "zs123456",
+      "角色": [
+        "out"
+      ],
+      "可管仓库": [
+        1
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjcsIm9wZW5pZCI6IiIsInVzZXJuYW1lIjoiemhhbmdzaGFuIiwiaWF0IjoxNzkwNjc0NjY2LCJleHAiOjE3OTEyNzk0NjZ9.hX8-TuunJpoJ9Vc0s0WCxeLvrdM68L4HpCrV2uG4Zlc"
+    },
+    {
+      "姓名": "李娜",
+      "岗位": "采购员",
+      "账号": "lina",
+      "密码": "ln123456",
+      "角色": [
+        "purchase"
+      ],
+      "可管仓库": [
+        1
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjgsIm9wZW5pZCI6IiIsInVzZXJuYW1lIjoibGluYSIsImlhdCI6MTc5MDY3NDY2NiwiZXhwIjoxNzkxMjc5NDY2fQ.TnCzXh9Ihm-K1NUf__vPlmSx19xhKqPhL1f77mm7HYk"
+    },
+    {
+      "姓名": "赵六",
+      "岗位": "仓管员（配件仓）",
+      "账号": "zhaoliu",
+      "密码": "zl123456",
+      "角色": [
+        "storekeeper"
+      ],
+      "可管仓库": [
+        1
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjksIm9wZW5pZCI6IiIsInVzZXJuYW1lIjoiemhhb2xpdSIsImlhdCI6MTc5MDY3NDY2NywiZXhwIjoxNzkxMjc5NDY3fQ.NlC-TMB_NF81YawmCtjXjtOt0Qc4DWs_xy2Y-ECVW8g"
+    },
+    {
+      "姓名": "王总",
+      "岗位": "老板",
+      "账号": "wangzong",
+      "密码": "wz123456",
+      "角色": [
+        "boss"
+      ],
+      "可管仓库": [
+        1,
+        2
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjEwLCJvcGVuaWQiOiIiLCJ1c2VybmFtZSI6Indhbmd6b25nIiwiaWF0IjoxNzkwNjc0NjY3LCJleHAiOjE3OTEyNzk0Njd9.vbvQ29qxnZrsNvyy1zlZxXSN8EufIDYNYcubCzpgPsU"
+    }
+  ],
+  "测试物料": [
+    {
+      "名称": "【测试】火花塞 A型",
+      "规格": "TEST-SPK-A",
+      "仓库": 1,
+      "_id": 1912,
+      "当前库存": 90,
+      "预警值": 20,
+      "加权成本": 12.5
+    },
+    {
+      "名称": "【测试】点火线圈 B型",
+      "规格": "TEST-COIL-B",
+      "仓库": 1,
+      "_id": 1913,
+      "当前库存": 54,
+      "预警值": 15,
+      "加权成本": 35
+    },
+    {
+      "名称": "【测试】刹车片 C型",
+      "规格": "TEST-BRK-C",
+      "仓库": 1,
+      "_id": 1914,
+      "当前库存": 3,
+      "预警值": 5,
+      "加权成本": 88
+    },
+    {
+      "名称": "【测试】机油滤芯 D型",
+      "规格": "TEST-OIL-D",
+      "仓库": 1,
+      "_id": 1915,
+      "当前库存": 0,
+      "预警值": 30,
+      "加权成本": 0
+    },
+    {
+      "名称": "【测试】空气滤芯 E型",
+      "规格": "TEST-AIR-E",
+      "仓库": 1,
+      "_id": 1916,
+      "当前库存": 0,
+      "预警值": 30,
+      "加权成本": 0
+    },
+    {
+      "名称": "【测试】轴承 F型",
+      "规格": "TEST-BRG-F",
+      "仓库": 2,
+      "_id": 1917,
+      "当前库存": 50,
+      "预警值": 10,
+      "加权成本": 22
+    }
+  ],
+  "初始入库单": [
+    {
+      "单号": "IN-20260929-001",
+      "仓库": 1,
+      "项数": 3
+    },
+    {
+      "单号": "IN-20260929-002",
+      "仓库": 2,
+      "项数": 1
+    }
+  ],
+  "待确认出库单": [
+    {
+      "单号": "OUT-20260929-001",
+      "物料": "【测试】火花塞 A型",
+      "数量": 10
+    },
+    {
+      "单号": "OUT-20260929-002",
+      "物料": "【测试】点火线圈 B型",
+      "数量": 6
+    }
+  ],
+  "重要语义": {
+    "库存变动时机": "出库/入库「提交」时即变动库存；确认、驳回只改状态；撤销、驳回才回补库存",
+    "幂等": "同一次提交带相同 client_request_id 只会生效一次",
+    "越权": "按 roles 判权；stats 等模块有 roleRules 限制"
+  }
+}

@@ -1,0 +1,226 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "胜龙进销存",
+        "navigationBarBackgroundColor": "#1a1a2e",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationBarBackgroundColor": "#1a1a2e",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/out/submit",
+      "style": {
+        "navigationBarTitleText": "领料出库",
+        "navigationBarBackgroundColor": "#0F7A3D",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/out/history",
+      "style": {
+        "navigationBarTitleText": "出库历史",
+        "navigationBarBackgroundColor": "#0F7A3D",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/out/detail",
+      "style": {
+        "navigationBarTitleText": "出库详情",
+        "navigationBarBackgroundColor": "#0F7A3D",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/in/submit",
+      "style": {
+        "navigationBarTitleText": "入库登记",
+        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/in/history",
+      "style": {
+        "navigationBarTitleText": "入库历史",
+        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/in/detail",
+      "style": {
+        "navigationBarTitleText": "入库详情",
+        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/check/list",
+      "style": {
+        "navigationBarTitleText": "盘点任务",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/check/submit",
+      "style": {
+        "navigationBarTitleText": "盘点录入",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/check/detail",
+      "style": {
+        "navigationBarTitleText": "盘点详情",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/boss/dashboard",
+      "style": {
+        "navigationBarTitleText": "数据看板",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/boss/trend",
+      "style": {
+        "navigationBarTitleText": "趋势分析",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/boss/stock",
+      "style": {
+        "navigationBarTitleText": "库存台账",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/boss/orders",
+      "style": {
+        "navigationBarTitleText": "单据流水",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/boss/warning",
+      "style": {
+        "navigationBarTitleText": "库存预警",
+        "navigationBarBackgroundColor": "#8A6A10",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/my/profile",
+      "style": {
+        "navigationBarTitleText": "个人信息",
+        "navigationBarBackgroundColor": "#1a1a2e",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/purchase/submit",
+      "style": {
+        "navigationBarTitleText": "采购入库",
+        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/purchase/history",
+      "style": {
+        "navigationBarTitleText": "采购入库历史",
+        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/purchase/detail",
+      "style": {
+        "navigationBarTitleText": "采购入库详情",
+        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/purchase/ledger",
+      "style": {
+        "navigationBarTitleText": "库存流水",
+        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/storekeeper/dashboard",
+      "style": {
+        "navigationBarTitleText": "仓管工作台",
+        "navigationBarBackgroundColor": "#6b5b95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/storekeeper/pending",
+      "style": {
+        "navigationBarTitleText": "待确认单据",
+        "navigationBarBackgroundColor": "#6b5b95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/storekeeper/orders",
+      "style": {
+        "navigationBarTitleText": "全部流水",
+        "navigationBarBackgroundColor": "#6b5b95",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/storekeeper/stock",
+      "style": {
+        "navigationBarTitleText": "本仓库存",
+        "navigationBarBackgroundColor": "#6b5b95",
+        "navigationBarTextStyle": "white"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "胜龙进销存",
+    "navigationBarBackgroundColor": "#1a1a2e",
+    "backgroundColor": "#f5f5f5"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#1a1a2e",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/my/profile",
+        "text": "我的"
+      }
+    ]
+  }
+}

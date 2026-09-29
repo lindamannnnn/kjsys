@@ -1,0 +1,97 @@
+/* 全局 SCSS 变量 */
+
+// 主题色
+$primary-color: #1a1a2e;
+$out-color: #0F7A3D;
+$in-color: #0B4F95;
+$boss-color: #8A6A10;
+
+// 功能色
+$danger-color: #e74c3c;
+$warning-color: #f39c12;
+$success-color: #27ae60;
+$info-color: #3498db;
+
+// 文字色
+$text-color: #333333;
+$text-secondary: #666666;
+$text-placeholder: #999999;
+
+// 边框色
+$border-color: #e0e0e0;
+$border-light: #f0f0f0;
+
+// 背景色
+$bg-color: #f5f5f5;
+$card-bg: #ffffff;
+
+// 字体大小
+$font-size-xs: 20rpx;
+$font-size-sm: 24rpx;
+$font-size-base: 28rpx;
+$font-size-lg: 32rpx;
+$font-size-xl: 36rpx;
+$font-size-xxl: 44rpx;
+
+// 间距
+$spacing-xs: 8rpx;
+$spacing-sm: 16rpx;
+$spacing-base: 24rpx;
+$spacing-lg: 32rpx;
+$spacing-xl: 48rpx;
+
+// 圆角
+$radius-sm: 8rpx;
+$radius-base: 12rpx;
+$radius-lg: 16rpx;
+$radius-xl: 24rpx;
+
+// 阴影
+$shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+$shadow-base: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+$shadow-lg: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
+
+// 角色卡片颜色
+.role-card {
+  &-out {
+    background: linear-gradient(135deg, $out-color, lighten($out-color, 10%));
+  }
+  &-in {
+    background: linear-gradient(135deg, $in-color, lighten($in-color, 10%));
+  }
+  &-boss {
+    background: linear-gradient(135deg, $boss-color, lighten($boss-color, 10%));
+  }
+}
+
+// 通用卡片
+.card {
+  background: $card-bg;
+  border-radius: $radius-base;
+  box-shadow: $shadow-sm;
+  padding: $spacing-base;
+  margin-bottom: $spacing-base;
+}
+
+// 通用按钮
+.btn {
+  &-primary {
+    background: $primary-color;
+    color: #fff;
+    border-radius: $radius-base;
+    padding: $spacing-sm $spacing-lg;
+    font-size: $font-size-base;
+  }
+  &-out {
+    background: $out-color;
+    color: #fff;
+  }
+  &-in {
+    background: $in-color;
+    color: #fff;
+  }
+  &-boss {
+    background: $boss-color;
+    color: #fff;
+  }
+}

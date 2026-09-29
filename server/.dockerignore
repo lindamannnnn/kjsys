@@ -1,0 +1,29 @@
+# ============================================
+# 构建镜像时要排除的文件
+# 目的：不要把密钥、依赖、测试数据打进镜像
+# ============================================
+
+# 敏感配置：绝不能进镜像（容器配置由 docker-compose 注入）
+.env
+.env.*
+!.env.example
+
+# 依赖（镜像内会重新 npm install）
+node_modules
+
+# 本地数据与上传文件
+data/
+uploads/
+*.log
+
+# 注意：tests/ 刻意保留在镜像内。
+# 理由：部署到服务器后需要用 `docker compose exec api node tests/api-test.js`
+# 在容器内跑端到端验证（容器里 DB_HOST=mysql:3306 才是真实连接路径）。
+# 测试代码不含任何密钥，体积可忽略。
+
+# 版本控制与编辑器
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store

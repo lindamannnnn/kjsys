@@ -1,0 +1,35 @@
+{
+  "name": "shenglong-erp",
+  "version": "2.1.0",
+  "description": "胜龙进销存系统 - 微信小程序 + Web 后台",
+  "private": true,
+  "scripts": {
+    "dev:mp": "cd miniprogram && npm run dev:mp-weixin",
+    "dev:admin": "cd admin && npm run dev",
+    "build:mp": "cd miniprogram && npm run build:mp-weixin",
+    "mp:open": "cd miniprogram && npm run mp:open",
+    "mp": "cd miniprogram && npm run mp",
+    "build:admin": "cd admin && npm run build",
+    "db:up": "docker compose up -d mysql",
+    "db:init": "cd server && npm run db:init",
+    "db:seed": "cd server && npm run db:seed",
+    "seed:dev": "cd server && npm run seed:dev",
+    "import:materials": "cd server && npm run import:materials",
+    "verify": "cd server && npm run verify",
+    "server": "cd server && npm start",
+    "server:dev": "cd server && npm run dev",
+    "test:api": "cd server && npm run test:api",
+    "test:contract": "cd server && npm run test:contract",
+    "test:all": "cd server && npm run test:api && npm run test:contract",
+    "audit:data": "cd server && npm run audit:data",
+    "verify:admin": "node scripts/verify-admin-warehouse-split.js"
+  },
+  "keywords": [
+    "进销存",
+    "微信小程序",
+    "uni-app",
+    "自建服务器"
+  ],
+  "author": "坦克老师",
+  "license": "ISC"
+}
