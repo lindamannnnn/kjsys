@@ -30,6 +30,20 @@
       </view>
     </scroll-view>
 
+    <!-- 细分类筛选：配件仓按编号分类、成品仓按车间，与后台物料页一致 -->
+    <scroll-view v-if="subCategories.length" class="sub-bar" scroll-x>
+      <view class="sub-item" :class="{ active: activeSub === '' }" @click="selectSub('')">全部</view>
+      <view
+        v-for="s in subCategories"
+        :key="s"
+        class="sub-item"
+        :class="{ active: activeSub === s }"
+        @click="selectSub(s)"
+      >
+        {{ s }}
+      </view>
+    </scroll-view>
+
     <!-- 物料列表 -->
     <scroll-view
       class="material-list"
@@ -47,7 +61,8 @@
       >
         <view class="material-info">
           <text class="material-name">{{ item.name }}</text>
-          <text class="material-spec">{{ item.spec }}</text>
+          <text class="material-spec">{{ item.material_no ? item.material_no + ' · ' : '' }}{{ item.spec || '无规格' }}</text>
+          <text v-if="item.sub_category" class="material-cat">{{ item.sub_category }}</text>
           <text class="material-stock">库存: {{ item.current_stock }} {{ item.unit }}</text>
         </view>
         <view class="material-action">
@@ -156,6 +171,10 @@ const refreshing = ref(false)
 const warehouses = ref([])
 const warehouseId = ref('')
 
+// 细分类筛选：配件仓=编号分类（A001 板材型材…），成品仓=车间
+const subCategories = ref([])
+const activeSub = ref('')
+
 const selectedMaterial = ref(null)
 const quantity = ref('')
 const unitPrice = ref('')
@@ -202,9 +221,29 @@ async function loadWarehouses() {
 function switchWarehouse(w) {
   if (Number(warehouseId.value) === Number(w._id)) return
   warehouseId.value = w._id
+  activeSub.value = ''
   page.value = 1
   noMore.value = false
   materialList.value = []
+  loadCategories()
+  loadMaterials()
+}
+
+/** 读取当前仓库的细分类清单（配件仓=编号分类，成品仓=车间） */
+async function loadCategories() {
+  try {
+    const res = await materialApi.categories({ warehouse_id: warehouseId.value || undefined })
+    subCategories.value = res.subCategories || []
+  } catch (err) {
+    subCategories.value = []
+  }
+}
+
+/** 点选/再点取消 细分类筛选 */
+function selectSub(s) {
+  activeSub.value = activeSub.value === s ? '' : s
+  page.value = 1
+  noMore.value = false
   loadMaterials()
 }
 
@@ -215,6 +254,7 @@ async function loadMaterials() {
     const res = await materialApi.list({
       keyword: keyword.value,
       warehouse_id: warehouseId.value || undefined,
+      sub_category: activeSub.value || undefined,
       page: page.value,
       pageSize: pageSize.value
     })
@@ -323,6 +363,7 @@ async function onSubmit() {
 // 页面加载
 onMounted(async () => {
   await loadWarehouses()
+  loadCategories()
   loadMaterials()
 })
 </script>
@@ -355,6 +396,30 @@ onMounted(async () => {
       background: #0B4F95;
       color: #fff;
       font-weight: bold;
+    }
+  }
+}
+
+/* 细分类筛选条 */
+.sub-bar {
+  white-space: nowrap;
+  padding: 10rpx 20rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #f0f0f0;
+
+  .sub-item {
+    display: inline-block;
+    padding: 8rpx 22rpx;
+    margin-right: 12rpx;
+    border-radius: 26rpx;
+    background: #f0f0f0;
+    font-size: 22rpx;
+    color: #666;
+    line-height: 1.5;
+
+    &.active {
+      background: #0B4F95;
+      color: #fff;
     }
   }
 }
@@ -404,7 +469,7 @@ onMounted(async () => {
 
 .material-list {
   padding: 20rpx;
-  height: calc(100vh - 600rpx);
+  height: calc(100vh - 690rpx);
 }
 
 .material-item {
@@ -431,6 +496,13 @@ onMounted(async () => {
       font-size: 24rpx;
       color: #999;
       margin-top: 8rpx;
+      display: block;
+    }
+
+    .material-cat {
+      font-size: 22rpx;
+      color: #0B4F95;
+      margin-top: 6rpx;
       display: block;
     }
 
@@ -474,6 +546,8 @@ onMounted(async () => {
   background: #fff;
   border-radius: 24rpx 24rpx 0 0;
   padding: 30rpx;
+  padding-bottom: calc(30rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
   box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.1);
 
   .selected-info {

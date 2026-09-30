@@ -11,7 +11,15 @@
       "disablePlugins": [],
       "outputPath": ""
     },
-    "useCompilerPlugins": false
+    "useCompilerPlugins": false,
+    "compileWorklet": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "condition": false
   },
   "compileType": "miniprogram",
   "simulatorPluginLibVersion": {},
@@ -19,7 +27,7 @@
     "ignore": [],
     "include": []
   },
-  "appid": "wxb2fd2feb972e8cbf",
+  "appid": "wxfcdd82985877919f",
   "editorSetting": {},
   "cloudfunctionRoot": "cloudfunctions/",
   "miniprogramRoot": "dist/build/mp-weixin/"
