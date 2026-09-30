@@ -130,7 +130,10 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // base 必须跟随 vite 的 base：
+  //   开发时 BASE_URL = '/'，生产构建时 = '/admin/'（见 vite.config.js）
+  // 若写死 createWebHistory()，部署到 /admin/ 后路由匹配不到任何页面 → 整站白屏
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
 
