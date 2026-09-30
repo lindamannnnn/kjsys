@@ -85,6 +85,15 @@ app.all('/api/health', async (req, res) => {
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads')
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }))
 
+// ---------- Web 后台静态托管（生产部署：admin 构建产物挂 /admin/） ----------
+// 目录不存在时不启用（本地开发后台走 vite 5173，不受影响）
+const ADMIN_DIR = process.env.ADMIN_DIR || path.join(__dirname, '../../admin/dist')
+if (require('fs').existsSync(ADMIN_DIR)) {
+  app.use('/admin', express.static(ADMIN_DIR, { maxAge: '1d' }))
+  // history 模式 SPA 兜底：/admin/ 下的前端路由都回 index.html
+  app.get('/admin/*', (req, res) => res.sendFile(path.join(ADMIN_DIR, 'index.html')))
+}
+
 // ---------- 业务模块统一分发 ----------
 for (const mod of modules) {
   app.post(`/api/${mod.name}`, async (req, res) => {
