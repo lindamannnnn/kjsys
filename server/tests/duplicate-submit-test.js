@@ -415,8 +415,8 @@ const outboundBody = (materialId, name, qty, remark) => ({
   items: [{ material_id: materialId, material_name: name, quantity: qty }]
 })
 
-const inboundBody = (materialId, name, qty, price, remark, supplier = `${PRE}供应商`) => ({
-  type: 'purchase', warehouse_id: WID, remark, supplier,
+const inboundBody = (materialId, name, qty, price, remark, supplier = `${PRE}供应商`, type = 'purchase') => ({
+  type, warehouse_id: WID, remark, supplier,
   items: [{ material_id: materialId, material_name: name, quantity: qty, unit_price: price }]
 })
 
@@ -529,6 +529,18 @@ async function runBackendChecks() {
   if (withSupplier.code === 0 && withSupplier.data) {
     createdOrderIds.inbound.push(Number(withSupplier.data._id))
   }
+
+  // 「入库登记」页（in/submit）是通用入口：不填供应商时前端显式传 type='other'（其他入库）。
+  // 车间自制、盘盈调整这类本就没有「跟谁买的」，后端若一律按采购入库拦，这货就入不了账。
+  const otherNoSupplier = await call('inbound', 'submit',
+    inboundBody(mInId, mIn.name, 5, 10, '防重验证：其他入库不填供应商', '', 'other'), TOKEN, rid())
+  checkTrue('其他入库不填供应商可提交（入库登记页走的路径）',
+    otherNoSupplier.code === 0, otherNoSupplier.message)
+  if (otherNoSupplier.code === 0 && otherNoSupplier.data) {
+    createdOrderIds.inbound.push(Number(otherNoSupplier.data._id))
+  }
+  const mOtherAfter = await mat(mInId)
+  checkEq('其他入库也正确加库存 5', mOtherAfter.stock - mInAfter2.stock, 5)
   if (i4a.code === 0 && i4a.data) createdOrderIds.inbound.push(Number(i4a.data._id))
   if (s1.code === 0 && s1.data) createdOrderIds.outbound.push(Number(s1.data._id))
   if (t1.code === 0 && t1.data) createdOrderIds.outbound.push(Number(t1.data._id))

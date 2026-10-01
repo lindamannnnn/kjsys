@@ -351,11 +351,10 @@ async function onSubmit() {
     return
   }
 
-  // 供应商必填：入库单要能追溯到货从哪来，空了没法对账
-  if (!String(supplier.value || '').trim()) {
-    uni.showToast({ title: '请填写供应商', icon: 'none' })
-    return
-  }
+  // 供应商是选填（与界面上「供应商（选填）」一致）：
+  // 不是所有入库都有供应商 —— 车间自制、盘盈调整这类本就没有「跟谁买的」，
+  // 强制填写会让这类货入不了账，所以这里不拦。
+  // 「有没有供应商」由提交时的 type 体现，见下方 type 的处理。
 
   const items = [{
     material_id: material._id,
@@ -373,6 +372,11 @@ async function onSubmit() {
     const res = await inboundApi.submit({
       items,
       supplier: supplier.value,
+      // 按「有没有填供应商」定单据类型：
+      //   填了 → 采购入库（后台对账口径，后端会强制要供应商）
+      //   没填 → 其他入库（车间自制、盘盈调整等，后端不强制）
+      // 这里显式传，避免走后端默认值 purchase 而被当成采购入库卡住
+      type: String(supplier.value || '').trim() ? 'purchase' : 'other',
       remark: remark.value,
       warehouse_id: material.warehouse_id
     })

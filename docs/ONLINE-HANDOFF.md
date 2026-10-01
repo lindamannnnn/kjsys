@@ -183,7 +183,7 @@ node scripts/pre-submit-check.js      # 复核产物 DEV_MODE 为 false
 | 已改未部署 | 文件 | 说明 |
 |---|---|---|
 | P0 入库撤销回退加权成本 | `server/src/services/stock.js`、`server/src/modules/inbound.js` | 撤销入库单时按批次冲回 `avg_cost`，下限夹 0 |
-| 供应商必填 + 前端防连点 | `inbound.js`、`miniprogram/src/utils/cloud.js`、4 个提交页 | 后端幂等键复用 + 前端提交闩锁 |
+| 供应商必填 + 前端防连点 | `inbound.js`、`miniprogram/src/utils/cloud.js`、4 个提交页 | 后端幂等键复用 + 前端提交闩锁。供应商：**采购入库必填**（后端兜底）；「入库登记」页**选填**（未填记为「其他入库」） |
 | 入库页底部表单：可收起 + 输入框不再被裁（2026-10-01） | `miniprogram/src/pages/in/submit.vue` | 见下方「附：入库页两个前端问题的根因与修法」 |
 | 全站输入框塌陷修复（2026-10-01） | `pages/my/profile.vue`、`out/submit.vue`、`purchase/submit.vue`、`check/submit.vue` | 同一个根因，一并修掉（5 处） |
 | 入库页底部灰带修复（2026-10-01） | `miniprogram/src/pages/in/submit.vue` | 列表高度不再用 `calc(100vh - 690rpx)`，改「容器整屏 + 列表 flex:1」 |

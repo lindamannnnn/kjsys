@@ -139,7 +139,7 @@ async function restoreForInboundCancel(conn, { material, quantity, orderNo, oper
 | 3 | **库存预警：看板说 1906 条，点进去一条也没有** | 老板 | ✅ 确认。`stats.overview` 的 `warning_count` 统计全部物料（`current_stock <= warning_stock`）；而 `stats.warning` 多了 `EXISTS(stock_logs)` 过滤，默认隐藏"从未发生过出入库的档案物料"→ 现在 1906 vs 0 | 待修 |
 | 4 | **预警线口径两页不一致**（等于预警线到底算不算） | 老板 | ✅ 确认。看板用 `current_stock <= warning_stock`（**≤**），明细页用 `current_stock < warning_stock`（**严格小于**）。恰好在预警线上的物料，两页会差 1 条 | 待修 |
 | 5 | **单价没有上限**，999999 直接入账 | 李娜 | ✅ 确认。`utils/validate.js` 的 `unitPrice()` 只校验「非负 + 最多两位小数」，**无上限**。测试中成本被拉到 9910.62 | 待修 |
-| 6 | **供应商可以空着入库**，不存在的 `supplier_id` 也照收 | 李娜 | ✅ 确认。`inbound.submit` 里 `supplier` 是 `String(data.supplier \|\| '')`，**无必填校验**。财务对账时问不出"跟谁买的" | **必填已修复**；`supplier_id` 存在性校验**未做**（见下） |
+| 6 | **供应商可以空着入库**，不存在的 `supplier_id` 也照收 | 李娜 | ✅ 确认。`inbound.submit` 里 `supplier` 是 `String(data.supplier \|\| '')`，**无必填校验**。财务对账时问不出"跟谁买的" | **采购入库必填已修复**（后端兜底）；`supplier_id` 存在性校验**未做**（见下）。<br>⚠️ 10-01 业务决策：「入库登记」页改为**选填**（理由见下方第 3 条） |
 | 7 | **月底要的对账单，系统给不全** | 李娜 | ✅ 部分确认。采购员无权调 `stats.overview`（roleRules 限制），库存流水没有金额字段，导出只有主单金额，且作废单不筛掉会虚增（实测虚增 ¥1092.80） | 待修 |
 | 8 | 盘点审核会拿"提交时的老数"覆盖当前库存 | 老板 | ⚠️ **降级为 P2**。复核发现 `check.review` 用的是 `liveBook = material.current_stock`（实时值），且会检测盘期间变动并写入流水备注。这是盘点的固有语义，系统已有察觉机制 | 降级 |
 
@@ -203,7 +203,15 @@ if (order.status === 'confirmed' && !isManager) {
    - 提交锁：`out/in/purchase/check` 四个提交页加 `submitting` 闩锁，
      并把全部 8 处 `showLoading` 补上 `mask:true`（另有 `in/detail` 改价、`check/detail` 审核）。
    - 证据：`server/tests/duplicate-submit-test.js`（35 项，含端到端对照实验）。
-3. ✅ **供应商必填** —— 已修复（前端提交前校验 + 后端 `inbound.submit` 兜底，直接调接口也绕不过）。
+3. ✅ **供应商必填（限采购入库）** —— 后端 `inbound.submit` 兜底：`type=purchase` 且未填供应商 → 400，
+   直接调接口也绕不过；采购页（`purchase/submit`，有供应商选择器）仍必须先选供应商，对账口径不受影响。
+   - ⚠️ **10-01 业务决策修正**：原实现是「所有入库一律必填」，但「入库登记」页
+     （导航标题就是通用的"入库登记"，不是"采购入库"）会把**车间自制、盘盈调整**这类
+     本就没有"跟谁买的"的货一起卡住，导致入不了账。
+   - 现按「有没有填供应商」定单据类型：填了 → `purchase`（采购入库，后端强制）；
+     没填 → `other`（其他入库，不强制）。界面文案「供应商（选填）」与实际行为一致。
+   - 证据：`server/tests/duplicate-submit-test.js` 场景 5 —— 37 项全通过，
+     两侧都覆盖（"采购入库不填被拒" + "其他入库不填可提交"）。
    ⏳ **未做**：`supplier_id` 存在性校验（传一个不存在的 id 仍会被存下）。
 4. ✅ **[P1] 后台白屏** —— **本次已修复并部署验证**。
 
