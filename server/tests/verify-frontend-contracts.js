@@ -11,11 +11,13 @@
  *   4) 若发现真实物料库存或成本被改动，脚本会明确报错提醒。
  *
  * 用法：node tests/verify-frontend-contracts.js
+ *       TEST_BASE=http://127.0.0.1:3100 node tests/verify-frontend-contracts.js
+ *       （TEST_BASE 用于指定端口，默认 3000；多实例并存时便于指定被测实例）
  */
 const { queryOne, execute } = require('../src/db/pool')
 const { acquireTestLock, releaseTestLock } = require('./_test-lock')
 
-const BASE = 'http://localhost:3000/api'
+const BASE = (process.env.TEST_BASE || 'http://localhost:3000') + '/api'
 const TAG = '【契约验证】'
 
 let pass = 0

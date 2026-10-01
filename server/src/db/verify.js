@@ -53,12 +53,15 @@ async function main() {
     console.log(`   ${r.name}（${r.code}）：${r.c} 条，库存 ${r.stock}，库存价值 ¥${Number(r.value).toFixed(2)}`)
   }
   // 源数据（materials-init.json）共 1930 行，其中 20 组同名同规格重复（21 条冗余），
-  // 导入时已自动去重，因此库内应为 1909 条
-  allPass = pass(total === 1909, `物料总数：${total}（源数据 1930 行 − 去重 21 条 = 1909）`) && allPass
+  // 导入时已自动去重 → 理论 1909 条。
+  // 之后又清理掉 3 条「车间目录行被误当成物料」的脏数据
+  // （节能炉车间 / 工程车间 / 西厨车间：无规格、无编号、库存与成本均为 0），
+  // 已软删除（is_deleted=1）。本查询只统计未删除的，故为 1906。
+  allPass = pass(total === 1906, `物料总数：${total}（1909 − 已清理的 3 条车间脏数据 = 1906）`) && allPass
 
   const chengpin = byWh.find((r) => r.code === 'chengpin')
   const peijian = byWh.find((r) => r.code === 'peijian')
-  allPass = pass(Number(chengpin?.c) === 150, `成品仓：${chengpin?.c} 条（期望 150）`) && allPass
+  allPass = pass(Number(chengpin?.c) === 147, `成品仓：${chengpin?.c} 条（150 − 上述 3 条车间脏数据 = 147）`) && allPass
   allPass = pass(Number(peijian?.c) === 1759, `配件仓：${peijian?.c} 条（源 1780 行 − 去重 21 条 = 1759）`) && allPass
 
   // 重复检查

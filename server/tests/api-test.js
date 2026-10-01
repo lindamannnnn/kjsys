@@ -130,6 +130,10 @@ async function main() {
   // 测试脚本先把密码改成同一个值以解除门禁（不改动你实际使用的密码），
   // 跑完最后一节再把标记还原，保证你手动登录时仍能看到强制改密流程。
   const adminPwd = process.env.ADMIN_PASSWORD || 'admin123456'
+  // 记录「测试前」的门禁原值：结束时按原值恢复，不给环境留副作用。
+  // （原实现无条件置回 1，导致紧接着跑的其它脚本全被
+  //  「首次登录必须先修改初始密码」挡住 —— 测试之间必须互不影响）
+  const adminMustChangeBefore = adminLogin.data && adminLogin.data.must_change_password ? 1 : 0
   if (adminLogin.data && adminLogin.data.must_change_password) {
     ok('初始密码带「必须改密」标记', true)
     const gatedCall = await api('stats', 'overview', {}, tokens.admin)
@@ -223,6 +227,7 @@ async function main() {
   // 第二笔不同单价，验证加权平均
   await api('inbound', 'submit', {
     items: [{ material_id: testMaterialId, quantity: 100, unit_price: 20, material_name: m1.name, unit: '个' }],
+    supplier: `${MARK}供应商`,
     remark: `${MARK} 加价入库`,
     warehouse_id: 'peijian'
   }, tokens.in)
@@ -286,6 +291,7 @@ async function main() {
   if (idem1.code !== 0) {
     await api('inbound', 'submit', {
       items: [{ material_id: testMaterialId2, quantity: 50, unit_price: 1, material_name: m2.name, unit: '个' }],
+      supplier: `${MARK}供应商`,
       remark: `${MARK} 幂等前置入库`, warehouse_id: 'peijian'
     }, tokens.in)
 
@@ -545,6 +551,7 @@ async function main() {
 
   const halfIn = await api('inbound', 'submit', {
     items: [{ material_id: testMaterialId, quantity: 1.5, unit_price: 1, material_name: m1.name, unit: '个' }],
+    supplier: `${MARK}供应商`,
     remark: `${MARK} 小数入库`
   }, tokens.in)
   ok('入库数量 1.5 被拒绝', halfIn.code === 400, halfIn.message)
@@ -571,6 +578,7 @@ async function main() {
       { material_id: testMaterialId, quantity: 10, unit_price: 10, material_name: m1.name, unit: '个' },
       { material_id: testMaterialId2, quantity: 10, unit_price: 5, material_name: m2.name, unit: '个' }
     ],
+    supplier: `${MARK}供应商`,
     remark: `${MARK} 改价测试双明细`,
     warehouse_id: 'peijian'
   }, tokens.in)
@@ -616,6 +624,7 @@ async function main() {
 
   const singleItemIn = await api('inbound', 'submit', {
     items: [{ material_id: testMaterialId, quantity: 2, unit_price: 3, material_name: m1.name, unit: '个' }],
+    supplier: `${MARK}供应商`,
     remark: `${MARK} 改价测试单明细`,
     warehouse_id: 'peijian'
   }, tokens.in)
@@ -977,18 +986,21 @@ async function main() {
   ok('测试单据已清理', cleanup.orders > 0, `清理单据 ${cleanup.orders} 张，还原物料 ${cleanup.materials} 项`)
   ok('测试物料库存已归零', cleanup.reset > 0, `归零 ${cleanup.reset} 项`)
 
-  // 还原「必须改密」标记：本测试为了跑通先解除了门禁，这里恢复，
-  // 保证你手动登录后台时仍然能看到「强制修改初始密码」的真实流程
+  // 还原「必须改密」标记：**按测试前的原值恢复**，而不是无条件置回 1。
+  // 测试前是 1（全新部署）→ 恢复 1，保证手动登录仍能看到强制改密流程；
+  // 测试前是 0（本地日常开发）→ 保持 0，不把环境改坏。
   const adminIdRow = await queryOne('SELECT id, must_change_password FROM users WHERE username = ?',
     [process.env.ADMIN_USERNAME || 'admin'])
-  if (adminIdRow && Number(adminIdRow.must_change_password) === 0) {
+  const flagNow = adminIdRow ? Number(adminIdRow.must_change_password) : null
+  if (adminMustChangeBefore === 1 && flagNow === 0) {
     const restoreFlag = await api('user', 'resetPassword', {
       id: adminIdRow.id, new_password: adminPwd
     }, tokens.admin)
     // resetPassword 会把标记置回 1（管理员重置的密码属临时密码）
-    ok('已还原「必须改密」标记（便于手动验证强制改密流程）', restoreFlag.code === 0, restoreFlag.message)
+    ok('「必须改密」标记已还原为测试前的状态', restoreFlag.code === 0, restoreFlag.message)
   } else {
-    ok('已还原「必须改密」标记（便于手动验证强制改密流程）', true, '标记已为 1')
+    ok('「必须改密」标记保持测试前状态（不留副作用）', true,
+      `测试前 ${adminMustChangeBefore}，当前 ${flagNow}`)
   }
 
   // ---------------------------------------------------------

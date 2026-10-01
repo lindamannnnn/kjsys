@@ -14,7 +14,7 @@
  */
 const { queryOne, execute } = require('../db/pool')
 const { errors } = require('../utils/response')
-const { num, qty, toDbId } = require('../utils/format')
+const { num, qty, money, toDbId } = require('../utils/format')
 
 /**
  * 锁定单个物料（行锁）
@@ -210,19 +210,87 @@ async function addForInbound(conn, { material, quantity, unitPrice, orderNo, ope
   return { before, after, avgCost, changed: true }
 }
 
-/** 入库撤销（若业务需要）：数量减少，成本不变 */
-async function restoreForInboundCancel(conn, { material, quantity, orderNo, operator }) {
+/**
+ * 入库撤销（作废）：数量减少 + 按批次冲回加权成本
+ *
+ * ⚠️ P0 修复（来自 4 角色使用者测试，3 个岗位独立复现）：
+ *   原实现只调 applyChange 扣数量、**成本一分不动**，与 addForInbound 完全不对称。
+ *   实测：刹车片 88 → 入库后 108.8993 → 作废后仍是 108.8993（应回到 88）；
+ *        机油滤芯 9.9 → 17.7136 → 作废后仍是 17.7136。
+ *   后果：作废越多、账面成本越失真，老板看到的「库存总金额」是错的，
+ *        还会顺着 stats 的库存金额一路错到成本报表。
+ *
+ * 现行口径（与 inbound.updatePrice 的「入库金额差额修正」同源，全系统一套算法）：
+ *   本批次占用库存价值 = unitPrice × quantity
+ *   冲回后单价 = (原加权成本 × 原库存数量 − 本批次入库金额) ÷ 冲回后库存数量
+ *
+ * 参数 unitPrice 必须传「该入库明细的单价」，来源 inbound_order_items.unit_price：
+ *   - 单据提交后没改过价 → 就是提交时那个价
+ *   - 改过价 → 明细里已是改后的价，且 updatePrice 已同步修正过 avg_cost，
+ *     此处再冲回不会重复计算
+ *
+ * @param {object} opts
+ * @param {number} opts.unitPrice 该批次入库单价（**必传**，缺失会退化成旧行为）
+ */
+async function restoreForInboundCancel(conn, { material, quantity, unitPrice, orderNo, operator, remark }) {
   const q = qty(quantity)
-  return applyChange(conn, {
-    material,
-    delta: -q,
+  const price = num(unitPrice)
+
+  const before = num(material.current_stock)
+  if (q <= 0) {
+    return { before, after: before, changed: false, costFloored: false }
+  }
+
+  const after = qty(before - q)
+  if (after < 0) {
+    const unit = material.unit ? ` ${material.unit}` : ''
+    throw errors.biz(
+      `库存不足，无法作废该入库：${material.name} 当前库存 ${before}${unit}，` +
+      `作废需扣减 ${q}${unit}。这批料可能已被领用，请先处理相关出库单据`
+    )
+  }
+
+  const beforeCost = num(material.avg_cost)
+  // 库存金额（数量 × 加权成本）减去本批次入库花的钱，就是冲回后剩下的库存金额
+  const remainValue = beforeCost * before - price * q
+
+  let afterCost = 0
+  let costFloored = false
+  if (after > 0) {
+    // 极端情况（这批入库后已被领用掉一部分）：冲回后金额可能为负，
+    // 说明历史出库没有结转成本、库存金额本就虚高。此处夹到 0 不产生负资产，
+    // 并在流水与操作日志里明确标注，方便事后核对。
+    costFloored = remainValue < 0
+    afterCost = Number(((costFloored ? 0 : remainValue) / after).toFixed(4))
+  }
+
+  await execute(
+    'UPDATE materials SET current_stock = ?, avg_cost = ? WHERE id = ?',
+    [after, afterCost, material.id],
+    conn
+  )
+
+  await writeLog(conn, {
+    materialId: material.id,
+    materialName: material.name,
+    warehouseId: material.warehouse_id,
     changeType: 'inbound_cancel',
+    delta: -q,
+    before,
+    after,
     orderNo,
     orderType: 'inbound',
-    operator,
-    remark: '入库撤销',
-    allowNegative: true
+    operatorOpenid: operator.openid || '',
+    operatorName: operator.name || '',
+    remark: (remark || '入库撤销') +
+      (price > 0 ? `；冲回本批入库金额 ${money(price * q)}，成本价 ${beforeCost} → ${afterCost}` : '')
   })
+
+  // 同步内存值：同一事务内若再次操作该物料，读到的是最新值
+  material.current_stock = after
+  material.avg_cost = afterCost
+
+  return { before, after, beforeCost, afterCost, costFloored, changed: true }
 }
 
 /** 盘点调整：把账面库存调成实际库存（允许出现负数差异） */

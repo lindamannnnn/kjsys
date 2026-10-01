@@ -5,7 +5,8 @@
  * 关键保障：
  *   1. 幂等：同一 client_request_id 只生效一次
  *   2. 事务 + 行锁，入库同时维护移动加权平均成本
- *   3. 驳回/撤销时回退库存
+ *   3. 作废（cancel）时回退库存，并按「本批次入库金额」冲回加权成本
+ *      （注：本模块只有 submit/confirm/cancel，没有驳回动作，作废是唯一冲回路径）
  *
  * ⚠️ 整改说明（来自 4 角色使用者测试，报告见 docs/4-ROLE-USER-TEST-REPORT.md）：
  *   P0-3.3 改价「假失败真落库」：total 声明在事务闭包内、用在闭包外，
@@ -17,6 +18,10 @@
  *   P1-3  确认无幂等 → 现条件更新 + 重复确认返回既有结果
  *   P1-11 已确认单据采购员无法纠错 → 老板/管理员可对已确认单改价（必留痕）
  *   P1-2-06 作废看不出是谁停的 → 现记录 cancel_operator
+ *   P0（本轮）作废不回退加权成本 → cancel 改走 restoreForInboundCancel，
+ *           按「本批次入库金额」冲回 avg_cost 并写流水留痕
+ *   P1（本轮）采购入库供应商可空 → submit 增加供应商必填兜底校验，
+ *           前端按钮置灰只是提示，后端才是真正拦得住的那道门
  * ============================================================
  */
 const { query, queryOne, execute, withTransaction } = require('../db/pool')
@@ -26,7 +31,7 @@ const { positiveInt, unitPrice: validateUnitPrice } = require('../utils/validate
 const { statusText, typeText } = require('../utils/labels')
 const { resolveWarehouseId } = require('../services/warehouse')
 const {
-  lockMaterialsSorted, addForInbound, applyChange, restoreForInboundCancel, writeLog
+  lockMaterialsSorted, addForInbound, restoreForInboundCancel, writeLog
 } = require('../services/stock')
 const { nextOrderNo } = require('../services/orderNo')
 const { operatorOf, hasAnyRole, identityOf } = require('../middleware/auth')
@@ -95,6 +100,12 @@ async function submit(ctx, data = {}) {
     requestedWid = await resolveWarehouseId(data.warehouse_id)
     if (!requestedWid) return fail(400, '所选仓库不存在')
     ctx.requireWarehouseAccess(requestedWid, '入库单')
+  }
+
+  // 供应商必填（采购入库）：货从哪来必须留痕，否则事后没法对账、也查不出问题批次。
+  // 前端的按钮置灰只是提醒，真正兜底的是这里 —— 直接调接口也绕不过去。
+  if (type === 'purchase' && !supplier.trim() && !supplierId) {
+    return fail(400, '请填写供应商（采购入库必须记录供应商，便于对账追溯）')
   }
 
   const operator = operatorOf(ctx.user)
@@ -622,12 +633,14 @@ async function cancel(ctx, data = {}) {
         )
       }
 
-      await applyChange(conn, {
+      // ⚠️ P0 修复：作废必须「数量回退 + 成本冲回」一起做。
+      // 原实现只调 applyChange 扣数量、avg_cost 一分不动，与 addForInbound 不对称，
+      // 导致作废后成本单向残留（实测 88 → 108.8993 → 作废后仍 108.8993）。
+      await restoreForInboundCancel(conn, {
         material,
-        delta: -num(it.quantity),
-        changeType: 'inbound_cancel',
+        quantity: it.quantity,
+        unitPrice: it.unit_price, // 该批次入库单价（改过价的以明细现价为准，不会重复计算）
         orderNo: order.order_no,
-        orderType: 'inbound',
         operator,
         remark: '入库作废，库存回退'
       })
