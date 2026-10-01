@@ -48,6 +48,19 @@
 
         <text class="tip">提交后请等待管理员审核</text>
       </view>
+
+      <!-- 协议同意（合规要求：不得默认勾选，必须由用户主动选择） -->
+      <view class="agree-row">
+        <view class="agree-box" :class="{ on: agreed }" @click="toggleAgree">
+          <text v-if="agreed" class="agree-mark">✓</text>
+        </view>
+        <view class="agree-words">
+          <text class="agree-plain" @click="toggleAgree">我已阅读并同意</text>
+          <text class="agree-link" @click="openDoc('user')">《用户服务协议》</text>
+          <text class="agree-plain" @click="toggleAgree">与</text>
+          <text class="agree-link" @click="openDoc('privacy')">《隐私政策》</text>
+        </view>
+      </view>
     </view>
 
     <!-- 底部说明 -->
@@ -66,6 +79,27 @@ const userStore = useUserStore()
 const needProfile = ref(false)
 const realName = ref('')
 const phone = ref('')
+
+// 是否已勾选同意协议。
+// 刻意不做预勾选、也不从缓存里读回上次的选择 —— 默认勾选属于「未经用户同意」，
+// 在合规上是被明确禁止的，必须由用户本次主动选择。
+const agreed = ref(false)
+
+function toggleAgree() {
+  agreed.value = !agreed.value
+}
+
+// 打开协议页（用户服务协议 / 隐私政策）
+function openDoc(type) {
+  uni.navigateTo({ url: `/pages/agreement/${type}` })
+}
+
+// 未勾选同意时统一拦截，返回 false 表示不放行
+function ensureAgreed() {
+  if (agreed.value) return true
+  uni.showToast({ title: '请先阅读并同意协议', icon: 'none', duration: 2200 })
+  return false
+}
 
 // 各角色登录后的默认落点
 const roleHome = {
@@ -89,8 +123,10 @@ function goHome() {
 
 // 微信登录（登录逻辑在 store 内统一封装）
 async function handleWechatLogin() {
+  if (!ensureAgreed()) return
+
   try {
-    uni.showLoading({ title: '登录中...' })
+    uni.showLoading({ title: '登录中...', mask: true })
     const res = await userStore.login()
     uni.hideLoading()
 
@@ -110,13 +146,15 @@ async function handleWechatLogin() {
 
 // 提交真实姓名，等待管理员审核
 async function handleSubmitProfile() {
+  if (!ensureAgreed()) return
+
   if (!realName.value.trim()) {
     uni.showToast({ title: '请输入真实姓名', icon: 'none' })
     return
   }
 
   try {
-    uni.showLoading({ title: '提交中...' })
+    uni.showLoading({ title: '提交中...', mask: true })
     await userStore.register({
       real_name: realName.value.trim(),
       phone: phone.value.trim()
@@ -235,6 +273,54 @@ async function handleSubmitProfile() {
     text-align: center;
     display: block;
     margin-top: 30rpx;
+  }
+}
+
+/* 协议同意区 */
+.agree-row {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 48rpx;
+  padding: 0 4rpx;
+
+  .agree-box {
+    width: 34rpx;
+    height: 34rpx;
+    flex-shrink: 0;
+    margin-top: 6rpx;
+    margin-right: 14rpx;
+    border: 2rpx solid rgba(255, 255, 255, 0.45);
+    border-radius: 8rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &.on {
+      background: #07c160;
+      border-color: #07c160;
+    }
+
+    .agree-mark {
+      font-size: 24rpx;
+      color: #fff;
+      line-height: 1;
+    }
+  }
+
+  .agree-words {
+    flex: 1;
+    font-size: 24rpx;
+    line-height: 1.7;
+  }
+
+  .agree-plain {
+    font-size: 24rpx;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .agree-link {
+    font-size: 24rpx;
+    color: #07c160;
   }
 }
 

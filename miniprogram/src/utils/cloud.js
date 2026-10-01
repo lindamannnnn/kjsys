@@ -20,9 +20,13 @@
 // ⚠️ 本地联调改回局域网 IP 后重新编译；服务器部署走 http://119.91.206.235:3000
 const API_BASE = 'http://119.91.206.235:3000'
 
-// 开发模式：为 true 时跳过微信登录，直接使用下面的测试身份
-// ⚠️ 正式上线前必须改成 false
-export const DEV_MODE = true
+// 开发登录开关：不再写死，由构建配置在编译期注入（见 vite.config.js 的 define）
+//   - 本地开发 / H5 浏览器联调 → true，可用下面的测试身份直接登录，不依赖微信 API
+//   - 小程序生产构建（即提交微信审核的那一份）→ false，强制走真实微信登录
+//
+// ⚠️ 兜底侧刻意取 false：万一常量没被注入，宁可关掉开发登录，
+//    也不能让它悄悄出现在提交审核的包里（曾因此被微信以「未浏览即强制授权登录」驳回）。
+export const DEV_MODE = typeof __DEV_LOGIN__ !== 'undefined' ? __DEV_LOGIN__ : false
 
 // 开发模式下的默认身份标识
 // 可在「我的」页面里切换，切换结果存在本地，不用改代码重新编译
@@ -93,20 +97,78 @@ export function clearToken() {
 }
 
 /* ============================================================
+ * 幂等键管理（防重复下单的关键）
+ * ------------------------------------------------------------
+ * 后端靠 client_request_id 识别「这是不是同一笔请求」。所以只有
+ * 同一笔业务提交复用同一个键，幂等才真的起作用。
+ *
+ * ⚠️ 曾经的写法是每次请求都现生成一个键 —— 等于每次都告诉后端
+ *    「这是一笔新请求」，幂等完全失效：网络超时后用户一点重试、
+ *    或者手快连点两下，后端就老老实实出两张单。
+ *
+ * 现在按「模块 + 动作 + 参数」指纹复用：
+ *   - 确定成功（后端返回 code 0）→ 立即作废，下次同参数是新的一笔
+ *   - 确定失败（后端返回业务错误码）→ 作废，因为事务已回滚
+ *   - 结果未知（网络异常 / 超时）→ 保留，用户重试时复用同一个键，
+ *     后端查到这个键已有单据会直接返回原单，不会重复出库
+ *
+ * 并发连点天然被覆盖：两次点击参数一致 → 指纹一致 → 同一个键。
+ * ============================================================ */
+
+// 最多缓存多少笔「结果未知」的键，超出按最早淘汰，避免长期运行内存膨胀
+const IDEMPOTENCY_MAX = 50
+const pendingRequestKeys = new Map()
+
+/** 稳定序列化：对象键排序，避免键顺序不同导致指纹不同 */
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value === undefined ? null : value)
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`
+  }
+  const keys = Object.keys(value).sort()
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`
+}
+
+/** 取（必要时新建）本次提交的幂等键 */
+function acquireRequestId(name, action, data) {
+  const fingerprint = `${name}.${action}::${stableStringify(data)}`
+  let requestId = pendingRequestKeys.get(fingerprint)
+  if (!requestId) {
+    requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+    if (pendingRequestKeys.size >= IDEMPOTENCY_MAX) {
+      // Map 保持插入顺序，第一个就是最早的
+      pendingRequestKeys.delete(pendingRequestKeys.keys().next().value)
+    }
+    pendingRequestKeys.set(fingerprint, requestId)
+  }
+  return { fingerprint, requestId }
+}
+
+/** 结果已明确（成功或业务失败）→ 作废该键；结果未知则保留供重试复用 */
+function settleRequestId(fingerprint) {
+  if (fingerprint) pendingRequestKeys.delete(fingerprint)
+}
+
+/* ============================================================
  * 核心：调用后端接口
  * ============================================================ */
 
 /**
  * 调用后端模块接口
- * @param {string} name   模块名：auth / material / outbound / inbound / check / stats / user ...
- * @param {string} action 动作名：submit / list / detail ...
- * @param {object} data   业务参数
+ * @param {string} name      模块名：auth / material / outbound / inbound / check / stats / user ...
+ * @param {string} action    动作名：submit / list / detail ...
+ * @param {object} data      业务参数
+ * @param {object} [options] 可选：{ client_request_id } 显式指定幂等键（一般不用传）
  * @returns {Promise<any>} 直接 resolve 业务数据（与原云函数封装一致）
  */
-export function callCloud(name, action, data = {}) {
+export function callCloud(name, action, data = {}, options = {}) {
   return new Promise((resolve, reject) => {
-    // 幂等键：网络异常重试时，后端凭它识别为同一笔请求，不会重复出库
-    const client_request_id = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+    const explicitId = options && options.client_request_id
+    const { fingerprint, requestId: client_request_id } = explicitId
+      ? { fingerprint: '', requestId: String(explicitId) }
+      : acquireRequestId(name, action, data)
     const token = getToken()
 
     const header = { 'Content-Type': 'application/json' }
@@ -123,21 +185,32 @@ export function callCloud(name, action, data = {}) {
 
         // 令牌失效：清掉本地登录态，让页面跳回登录
         if (body.code === 401) {
+          settleRequestId(fingerprint)
           clearToken()
           reject(Object.assign(new Error(body.message || '登录已过期'), { code: 401 }))
           return
         }
 
         if (body.code === 0) {
+          // 确定成功 → 作废幂等键，下一次同参数提交才是新的一笔
+          settleRequestId(fingerprint)
+          // 后端识别出这是重复提交（上一次其实已成功）时给出标记，页面可提示得更准确
+          if (body.data && typeof body.data === 'object' && body.data.duplicated) {
+            body.data.__duplicated = true
+          }
           resolve(body.data)
         } else {
+          // 确定失败：后端事务已回滚，这笔没生效，作废键让用户重试时是一笔新的
+          settleRequestId(fingerprint)
           const err = new Error(body.message || '请求失败')
           err.code = body.code
           reject(err)
         }
       },
       fail: (err) => {
-        console.error(`[接口失败] ${name}.${action}`, err)
+        // 结果未知（超时 / 断网 / 服务无响应）→ 保留幂等键。
+        // 用户重试时复用同一个键，后端若发现这笔其实已入库会返回原单，不会出双单。
+        console.error(`[接口失败，结果未知，重试将复用同一幂等键] ${name}.${action}`, err)
         const e = new Error('网络异常，请检查网络后重试')
         e.code = -1
         e.raw = err

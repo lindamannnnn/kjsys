@@ -11,10 +11,77 @@
       <text>加载中...</text>
     </view>
 
-    <!-- 未登录 -->
-    <view v-else-if="!isLoggedIn" class="login-prompt">
-      <text class="prompt-text">请先登录</text>
-      <button class="btn-primary" @click="goLogin">去登录</button>
+    <!-- 未登录：先展示系统介绍，不做登录墙（审核要求：先让用户了解，再要求登录） -->
+    <view v-else-if="!isLoggedIn" class="intro">
+      <view class="intro-card">
+        <text class="intro-lead">企业内部物资出入库管理系统</text>
+        <text class="intro-text">
+          本系统用于记录和管理本企业自有物资的入库、领料出库、库存盘点与库存账目，
+          让每一笔物资的流向都能追溯到经手人，方便企业内部对账与管理。
+        </text>
+      </view>
+
+      <text class="section-title">系统功能</text>
+      <view class="feature-list">
+        <view class="feature-item">
+          <text class="feature-icon">🟢</text>
+          <view class="feature-main">
+            <text class="feature-name">领料出库</text>
+            <text class="feature-desc">车间员工提交领料单，仓库管理员审核后出库</text>
+          </view>
+        </view>
+        <view class="feature-item">
+          <text class="feature-icon">🔵</text>
+          <view class="feature-main">
+            <text class="feature-name">入库登记</text>
+            <text class="feature-desc">物资到货入库，系统自动核算加权成本</text>
+          </view>
+        </view>
+        <view class="feature-item">
+          <text class="feature-icon">🛒</text>
+          <view class="feature-main">
+            <text class="feature-name">采购入库</text>
+            <text class="feature-desc">采购员录单，登记供应商、单价与金额明细</text>
+          </view>
+        </view>
+        <view class="feature-item">
+          <text class="feature-icon">📦</text>
+          <view class="feature-main">
+            <text class="feature-name">仓管工作台</text>
+            <text class="feature-desc">待办单据审核、驳回与库存查看</text>
+          </view>
+        </view>
+        <view class="feature-item">
+          <text class="feature-icon">📋</text>
+          <view class="feature-main">
+            <text class="feature-name">库存盘点</text>
+            <text class="feature-desc">发起盘点任务，盘点差异需审核通过后生效</text>
+          </view>
+        </view>
+        <view class="feature-item">
+          <text class="feature-icon">📄</text>
+          <view class="feature-main">
+            <text class="feature-name">库存流水</text>
+            <text class="feature-desc">每笔出入库可追溯，支持按物料对账核账</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="intro-card notice-card-plain">
+        <text class="notice-title-plain">使用说明</text>
+        <text class="notice-text-plain">
+          本系统仅面向本企业员工开放使用，不面向社会公众提供服务。
+          首次使用时请用微信登录并填写真实姓名，由管理员审核通过、分配岗位权限后即可开始使用。
+        </text>
+      </view>
+
+      <button class="btn-login" @click="goLogin">员工登录</button>
+
+      <view class="legal-links">
+        <text class="legal-link" @click="openDoc('user')">《用户服务协议》</text>
+        <text class="legal-plain">·</text>
+        <text class="legal-link" @click="openDoc('privacy')">《隐私政策》</text>
+      </view>
     </view>
 
     <!-- 待审核 -->
@@ -181,6 +248,11 @@ function goLogin() {
   uni.navigateTo({ url: '/pages/login/login' })
 }
 
+// 打开协议页（用户服务协议 / 隐私政策）
+function openDoc(type) {
+  uni.navigateTo({ url: `/pages/agreement/${type}` })
+}
+
 function goOut() {
   uni.navigateTo({ url: '/pages/out/submit' })
 }
@@ -260,7 +332,7 @@ onMounted(async () => {
   color: #999;
 }
 
-.login-prompt, .pending-prompt {
+.pending-prompt {
   text-align: center;
   padding: 100rpx 40rpx;
 
@@ -277,13 +349,130 @@ onMounted(async () => {
     display: block;
     margin-bottom: 40rpx;
   }
+}
 
-  .btn-primary {
-    background: #1a1a2e;
-    color: #fff;
-    border-radius: 12rpx;
-    padding: 24rpx 80rpx;
-    font-size: 30rpx;
+/* ===== 未登录时的系统介绍（审核要求：先可浏览，再登录） ===== */
+.intro {
+  padding-bottom: 40rpx;
+}
+
+.intro-card {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 36rpx;
+  margin-bottom: 32rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
+
+  .intro-lead {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: #1a1a2e;
+    display: block;
+    margin-bottom: 16rpx;
+  }
+
+  .intro-text {
+    font-size: 27rpx;
+    color: #555;
+    line-height: 1.8;
+    display: block;
+  }
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #1a1a2e;
+  display: block;
+  margin: 8rpx 0 24rpx;
+}
+
+.feature-list {
+  margin-bottom: 32rpx;
+}
+
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+
+  .feature-icon {
+    font-size: 40rpx;
+    margin-right: 22rpx;
+    line-height: 1.2;
+  }
+
+  .feature-main {
+    flex: 1;
+
+    .feature-name {
+      font-size: 29rpx;
+      font-weight: 500;
+      color: #1a1a2e;
+      display: block;
+      margin-bottom: 8rpx;
+    }
+
+    .feature-desc {
+      font-size: 24rpx;
+      color: #888;
+      line-height: 1.6;
+      display: block;
+    }
+  }
+}
+
+.notice-card-plain {
+  background: #f7f8fa;
+  box-shadow: none;
+  border: 1rpx solid #e8e8ef;
+
+  .notice-title-plain {
+    font-size: 28rpx;
+    font-weight: bold;
+    color: #1a1a2e;
+    display: block;
+    margin-bottom: 14rpx;
+  }
+
+  .notice-text-plain {
+    font-size: 25rpx;
+    color: #666;
+    line-height: 1.8;
+    display: block;
+  }
+}
+
+.btn-login {
+  background: #1a1a2e;
+  color: #fff;
+  border-radius: 50rpx;
+  padding: 28rpx;
+  font-size: 32rpx;
+  margin-top: 16rpx;
+
+  &::after {
+    border: none;
+  }
+}
+
+.legal-links {
+  text-align: center;
+  margin-top: 32rpx;
+
+  .legal-link {
+    font-size: 24rpx;
+    color: #0B4F95;
+  }
+
+  .legal-plain {
+    font-size: 24rpx;
+    color: #bbb;
+    padding: 0 10rpx;
   }
 }
 
