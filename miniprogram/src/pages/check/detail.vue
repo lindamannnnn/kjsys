@@ -171,7 +171,7 @@ async function onReview(approve) {
   })
   if (!confirmed) return
 
-  uni.showLoading({ title: '处理中...' })
+  uni.showLoading({ title: '处理中...', mask: true })
   try {
     await checkApi.review({ id: checkId.value, approve })
     uni.hideLoading()

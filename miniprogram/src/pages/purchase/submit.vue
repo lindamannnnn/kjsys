@@ -86,12 +86,12 @@
 
     <!-- 入库清单（批量） -->
     <view class="cart-panel" :class="{ expanded: cartExpanded }">
-      <view class="cart-header" @click="cartExpanded = !cartExpanded">
-        <text class="cart-title">入库清单 ({{ cartList.length }} 项)</text>
-        <text class="cart-toggle">{{ cartExpanded ? '▼ 收起' : '▲ 展开' }}</text>
+      <view class="cart-header" @click="toggleCart">
+        <text class="cart-title">{{ cartTitle }}</text>
+        <text v-if="cartList.length" class="cart-toggle">{{ cartExpanded ? '▼ 收起' : '▲ 展开' }}</text>
       </view>
 
-      <scroll-view v-if="cartExpanded" class="cart-items" scroll-y>
+      <scroll-view v-if="cartExpanded && cartList.length > 0" class="cart-items" scroll-y>
         <view v-for="(cartItem, index) in cartList" :key="cartItem.material_id" class="cart-item">
           <view class="cart-item-info">
             <text class="cart-item-name">{{ cartItem.material_name }}</text>
@@ -126,9 +126,6 @@
             <text v-if="cartItem.error" class="error-text">{{ cartItem.error }}</text>
           </view>
           <text class="remove-btn" @click.stop="removeFromCart(index)">✕</text>
-        </view>
-        <view v-if="cartList.length === 0" class="cart-empty">
-          <text>点击上方物料加入清单</text>
         </view>
       </scroll-view>
 
@@ -269,6 +266,15 @@ const activeSub = ref('')
 
 const cartList = ref([])
 const cartExpanded = ref(true)
+// 空清单时不开抽屉：展开也只是给一句提示，白占 60px，还把列表最后一张卡片压住。
+// 提示改由栏头文案承担，加料后行为与以前完全一致（默认展开、可收起、显示提交表单）。
+const cartTitle = computed(() =>
+  cartList.value.length ? `入库清单 (${cartList.value.length} 项)` : '入库清单 · 点下方物料加入'
+)
+function toggleCart() {
+  if (!cartList.value.length) return
+  cartExpanded.value = !cartExpanded.value
+}
 const supplier = ref('')
 const supplierId = ref('')
 const remark = ref('')
@@ -284,6 +290,8 @@ const supplierLoading = ref(false)
 const showSupplierForm = ref(false)
 const savingSupplier = ref(false)
 const supplierForm = ref({ _id: '', name: '', contact: '', phone: '', tax_no: '', payment_terms: '', address: '' })
+// 提交闩锁：防止手快连点造成重复提交（后端幂等兜底，这里是第一道门）
+const submitting = ref(false)
 const supplierFields = [
   { key: 'name', label: '名称', placeholder: '供应商名称（必填）' },
   { key: 'contact', label: '联系人', placeholder: '如：王经理' },
@@ -565,6 +573,8 @@ function selectSupplier(s) {
 
 function onSubmit() {
   if (!canSubmit.value) return
+  // 正在提交中，忽略后续点击（否则会连弹两个确认框、进而提交两次）
+  if (submitting.value) return
 
   // 二次确认
   uni.showModal({
@@ -582,6 +592,10 @@ function onSubmit() {
 
 // 提交入库单（采购走入库模块）
 async function doSubmit() {
+  // 二次确认弹窗的「确认」也可能被连点，这里再上一道闩锁
+  if (submitting.value) return
+  submitting.value = true
+
   const items = cartList.value.map((it) => ({
     material_id: it.material_id,
     material_name: it.material_name,
@@ -596,7 +610,8 @@ async function doSubmit() {
   const itemCount = items.length
   const total = totalPrice.value
 
-  uni.showLoading({ title: '提交中...' })
+  // mask: true 会盖一层遮罩挡住点击，避免提交过程中再次触发
+  uni.showLoading({ title: '提交中...', mask: true })
   try {
     const res = await inboundApi.submit({
       items,
@@ -615,8 +630,11 @@ async function doSubmit() {
     remark.value = ''
 
     uni.showModal({
-      title: '入库成功',
-      content: `单号: ${res.order_no}\n共 ${itemCount} 项物料\n合计: ¥${total}`,
+      // 重复提交（上一次其实已成功）时说明是同一张单，避免用户以为入了两次
+      title: res.__duplicated ? '这笔已提交成功' : '入库成功',
+      content: res.__duplicated
+        ? `上一次提交其实已经成功，这是同一张单\n单号: ${res.order_no}`
+        : `单号: ${res.order_no}\n共 ${itemCount} 项物料\n合计: ¥${total}`,
       confirmText: '查看记录',
       cancelText: '继续入库',
       success: (r) => {
@@ -628,6 +646,8 @@ async function doSubmit() {
   } catch (err) {
     uni.hideLoading()
     uni.showToast({ title: err.message || '提交失败', icon: 'none', duration: 3000 })
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -641,9 +661,13 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 .container {
-  min-height: 100vh;
+  /* 整屏高度：H5 减掉顶部导航，小程序端 --window-top 为 0（原生导航在 webview 之外）。
+     列表用 flex:1 填满剩余空间，避免列表底离屏幕底差一截、露出纯背景灰带。 */
+  height: 100vh;
+  height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px));
+  display: flex;
+  flex-direction: column;
   background: #f5f5f5;
-  padding-bottom: 600rpx;
 }
 
 /* 仓库切换条 */
@@ -739,8 +763,12 @@ onMounted(async () => {
 }
 
 .material-list {
+  /* 填满「筛选条以下 → 屏幕底」，底部再垫出采购清单栏的高度（栏高实测 90rpx），
+     否则滚到底时最后一张卡片会被这条固定栏盖住 */
+  flex: 1;
+  min-height: 0;
   padding: 20rpx;
-  height: calc(100vh - 790rpx);
+  padding-bottom: calc(100rpx + env(safe-area-inset-bottom));
 }
 
 .material-item {
@@ -969,7 +997,12 @@ onMounted(async () => {
       .input {
         background: #f5f5f5;
         border-radius: 12rpx;
-        padding: 20rpx 24rpx;
+        /* uni-app H5 给 uni-input 写死了 height:1.4em + overflow:hidden：
+           只写上下 padding 会被吃掉，内层 input 塌成 1px，输入的字看不见。
+           显式给高度与行高，小程序端同样成立。 */
+        height: 88rpx;
+        line-height: 88rpx;
+        padding: 0 24rpx;
         font-size: 30rpx;
         width: 100%;
         box-sizing: border-box;
@@ -1083,8 +1116,12 @@ onMounted(async () => {
     .input {
       background: #f5f5f5;
       border-radius: 12rpx;
-      padding: 16rpx 24rpx;
+      /* 同上：uni-input 默认 1.4em 高会把文字裁掉，必须显式给高度 */
+      height: 80rpx;
+      line-height: 80rpx;
+      padding: 0 24rpx;
       font-size: 28rpx;
+      box-sizing: border-box;
     }
 
     .placeholder {

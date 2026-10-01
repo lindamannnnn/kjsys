@@ -389,13 +389,24 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .container {
-  min-height: 100vh;
+  /* 整屏高度：H5 减掉顶部导航，小程序端 --window-top 为 0（原生导航在 webview 之外）。
+     列表用 flex:1 填满剩余空间，避免列表底伸出屏幕外、最后一条滚不进来。 */
+  height: 100vh;
+  height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px));
+  display: flex;
+  flex-direction: column;
   background: #f5f5f5;
-  padding: 20rpx;
+  padding: 20rpx 20rpx 0; /* 底部不留白：列表要一直顶到屏幕底，否则又露出一条灰带 */
+  /* 容器自己还有 20rpx 内边距，height 不含 padding 会多出 20px 让人能拖动整页 */
+  box-sizing: border-box;
 }
 
 .check-list {
-  height: calc(100vh - 200rpx);
+  /* 填满剩余空间，底部再垫出「新建盘点单」固定栏的高度（栏高实测 165rpx），
+     否则列表底会伸到屏幕外、最后一条盘点单被这条栏盖住 */
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 170rpx;
 }
 
 .check-item {

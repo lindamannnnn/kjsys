@@ -226,7 +226,7 @@ async function onSaveProfile() {
     return
   }
   try {
-    uni.showLoading({ title: '保存中...' })
+    uni.showLoading({ title: '保存中...', mask: true })
     await userStore.updateProfile({ real_name: realName, phone: editPhone.value.trim() })
     uni.hideLoading()
     uni.showToast({ title: '资料已更新', icon: 'success' })
@@ -244,7 +244,7 @@ async function onRegister() {
     return
   }
   try {
-    uni.showLoading({ title: '提交中...' })
+    uni.showLoading({ title: '提交中...', mask: true })
     await userStore.register({ real_name: realName, phone: registerPhone.value.trim() })
     uni.hideLoading()
     uni.showToast({ title: '已提交，请等待审核', icon: 'success' })
@@ -408,7 +408,12 @@ onMounted(() => {
     .input {
       background: #f5f5f5;
       border-radius: 12rpx;
-      padding: 20rpx 24rpx;
+      /* uni-app H5 给 uni-input 写死了 height:1.4em + overflow:hidden：
+         只写上下 padding 会被吃掉，内层 input 塌成 1px，输入的字看不见。
+         显式给高度与行高，小程序端同样成立。 */
+      height: 88rpx;
+      line-height: 88rpx;
+      padding: 0 24rpx;
       font-size: 30rpx;
       width: 100%;
       box-sizing: border-box;

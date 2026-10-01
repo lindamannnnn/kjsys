@@ -74,6 +74,8 @@ import { checkApi } from '@/utils/api'
 const check = ref({})
 const checkId = ref('')
 const loading = ref(false)
+// 提交闩锁：防止手快连点造成重复提交（后端幂等兜底，这里是第一道门）
+const submitting = ref(false)
 
 /** 是否已录入实际数量 */
 function isEntered(item) {
@@ -189,6 +191,8 @@ async function loadCheck() {
 
 async function onSubmit() {
   if (!canSubmit.value) return
+  // 正在提交中，忽略后续点击（连点不产生第二次提交）
+  if (submitting.value) return
 
   const items = check.value.items
     .filter(isEntered)
@@ -211,7 +215,9 @@ async function onSubmit() {
   })
   if (!confirmed) return
 
-  uni.showLoading({ title: '提交中...' })
+  submitting.value = true
+  // mask: true 会盖一层遮罩挡住点击，避免提交过程中再次触发
+  uni.showLoading({ title: '提交中...', mask: true })
   try {
     await checkApi.submit({ id: checkId.value, items })
     uni.hideLoading()
@@ -222,6 +228,8 @@ async function onSubmit() {
   } catch (err) {
     uni.hideLoading()
     uni.showToast({ title: err.message || '提交失败', icon: 'none', duration: 3000 })
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -235,9 +243,13 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .container {
-  min-height: 100vh;
+  /* 整屏高度：H5 减掉顶部导航，小程序端 --window-top 为 0（原生导航在 webview 之外）。
+     列表用 flex:1 填满剩余空间，避免列表底离屏幕底差一截、露出纯背景灰带。 */
+  height: 100vh;
+  height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px));
+  display: flex;
+  flex-direction: column;
   background: #f5f5f5;
-  padding-bottom: 160rpx;
 }
 
 .check-info {
@@ -302,8 +314,12 @@ onMounted(() => {
 }
 
 .material-list {
+  /* 填满「盘点信息以下 → 屏幕底」，底部再垫出固定提交栏的高度（栏高实测 233rpx），
+     否则滚到底时最后一张卡片会被这条栏盖住 */
+  flex: 1;
+  min-height: 0;
   padding: 0 20rpx;
-  height: calc(100vh - 480rpx);
+  padding-bottom: 240rpx;
 }
 
 .material-item {
@@ -351,8 +367,14 @@ onMounted(() => {
       flex: 1;
       background: #f5f5f5;
       border-radius: 12rpx;
-      padding: 20rpx 24rpx;
+      /* uni-app H5 给 uni-input 写死了 height:1.4em + overflow:hidden：
+         只写上下 padding 会被吃掉，内层 input 塌成 1px，输入的字看不见。
+         显式给高度与行高，小程序端同样成立。 */
+      height: 88rpx;
+      line-height: 88rpx;
+      padding: 0 24rpx;
       font-size: 30rpx;
+      box-sizing: border-box;
     }
 
     .placeholder {

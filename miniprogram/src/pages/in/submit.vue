@@ -1,5 +1,6 @@
 <template>
-  <view class="container">
+  <!-- 面板打开时给容器加标记，用于压缩列表高度，避免物料被面板永久压住 -->
+  <view class="container" :class="{ 'has-panel': !!selectedMaterial }">
     <!-- 搜索栏 -->
     <view class="search-bar">
       <view class="search-input">
@@ -44,11 +45,12 @@
       </view>
     </scroll-view>
 
-    <!-- 物料列表 -->
+    <!-- 物料列表：点列表空白处 = 收起底部表单（物料卡片上有 .stop，不会误触） -->
     <scroll-view
       class="material-list"
       scroll-y
       @scrolltolower="loadMore"
+      @click="closePanel"
       :refresher-enabled="true"
       :refresher-triggered="refreshing"
       @refresherrefresh="onRefresh"
@@ -57,7 +59,7 @@
         v-for="item in materialList"
         :key="item._id"
         class="material-item"
-        @click="onSelectMaterial(item)"
+        @click.stop="onSelectMaterial(item)"
       >
         <view class="material-info">
           <text class="material-name">{{ item.name }}</text>
@@ -82,37 +84,50 @@
         <text class="empty-icon">📦</text>
         <text class="empty-text">暂无物料</text>
       </view>
+
+      <!-- 垫底：面板是浮在列表上的，垫高后最后几个物料也能滚到面板上方点到 -->
+      <view v-if="selectedMaterial" class="panel-spacer"></view>
     </scroll-view>
 
-    <!-- 底部选中物料表单 -->
+    <!-- 底部选中物料表单：可点右上角 ✕ 收起，也可点列表空白处收起 -->
     <view v-if="selectedMaterial" class="submit-panel">
+      <view class="panel-head">
+        <view class="panel-grabber"></view>
+        <view class="panel-close" @click.stop="closePanel">
+          <text>✕</text>
+        </view>
+      </view>
+
       <view class="selected-info">
         <text class="selected-name">{{ selectedMaterial.name }}</text>
         <text class="selected-stock">当前库存: {{ selectedMaterial.current_stock }} {{ selectedMaterial.unit }}</text>
       </view>
 
       <view class="form-group">
-        <view class="form-item">
-          <text class="label">入库数量</text>
-          <input
-            v-model="quantity"
-            class="input"
-            type="number"
-            placeholder="请输入数量"
-            placeholder-class="placeholder"
-          />
-        </view>
+        <!-- 数量与单价并排：面板是浮层，两个短数字各占一行会让面板过高、把物料列表压没 -->
+        <view class="form-row">
+          <view class="form-item">
+            <text class="label">入库数量</text>
+            <input
+              v-model="quantity"
+              class="input"
+              type="number"
+              placeholder="请输入数量"
+              placeholder-class="placeholder"
+            />
+          </view>
 
-        <view class="form-item">
-          <text class="label">单价（元）</text>
-          <input
-            v-model="unitPrice"
-            class="input"
-            type="digit"
-            placeholder="请输入单价"
-            placeholder-class="placeholder"
-            @input="calcTotal"
-          />
+          <view class="form-item">
+            <text class="label">单价（元）</text>
+            <input
+              v-model="unitPrice"
+              class="input"
+              type="digit"
+              placeholder="请输入单价"
+              placeholder-class="placeholder"
+              @input="calcTotal"
+            />
+          </view>
         </view>
 
         <view class="form-item">
@@ -180,6 +195,8 @@ const quantity = ref('')
 const unitPrice = ref('')
 const supplier = ref('')
 const remark = ref('')
+// 提交闩锁：防止手快连点造成重复提交（后端幂等兜底，这里是第一道门）
+const submitting = ref(false)
 
 // 计算属性
 const totalPrice = computed(() => {
@@ -294,9 +311,23 @@ function onScan() {
   })
 }
 
-// 选择物料
+// 选择物料：再点一次同一物料 = 收起面板（避免"只进不出"）
 function onSelectMaterial(item) {
+  if (selectedMaterial.value && String(selectedMaterial.value._id) === String(item._id)) {
+    closePanel()
+    return
+  }
   selectedMaterial.value = item
+  quantity.value = ''
+  unitPrice.value = ''
+  supplier.value = ''
+  remark.value = ''
+}
+
+// 收起底部表单：点 ✕、点列表空白处、再点同一物料都会走这里
+function closePanel() {
+  if (!selectedMaterial.value) return
+  selectedMaterial.value = null
   quantity.value = ''
   unitPrice.value = ''
   supplier.value = ''
@@ -311,10 +342,18 @@ function calcTotal() {
 // 提交入库
 async function onSubmit() {
   if (!canSubmit.value) return
+  // 正在提交中，忽略后续点击（连点不产生第二张单）
+  if (submitting.value) return
 
   const material = selectedMaterial.value
   if (!material || !material.warehouse_id) {
     uni.showToast({ title: '物料缺少仓库信息，请重新选择', icon: 'none' })
+    return
+  }
+
+  // 供应商必填：入库单要能追溯到货从哪来，空了没法对账
+  if (!String(supplier.value || '').trim()) {
+    uni.showToast({ title: '请填写供应商', icon: 'none' })
     return
   }
 
@@ -327,7 +366,9 @@ async function onSubmit() {
     unit_price: Number(unitPrice.value)
   }]
 
-  uni.showLoading({ title: '提交中...' })
+  submitting.value = true
+  // mask: true 会盖一层遮罩挡住点击，避免提交过程中再次触发
+  uni.showLoading({ title: '提交中...', mask: true })
   try {
     const res = await inboundApi.submit({
       items,
@@ -340,7 +381,10 @@ async function onSubmit() {
     uni.vibrateShort()
 
     uni.showToast({
-      title: `入库成功 ${res.order_no || ''}`,
+      // 重复提交（上一次其实已成功）时说明是同一张单，避免用户以为入了两次
+      title: res.__duplicated
+        ? `该笔已提交过 ${res.order_no || ''}`
+        : `入库成功 ${res.order_no || ''}`,
       icon: 'none',
       duration: 2000
     })
@@ -357,6 +401,8 @@ async function onSubmit() {
   } catch (err) {
     uni.hideLoading()
     uni.showToast({ title: err.message || '提交失败', icon: 'none', duration: 3000 })
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -370,9 +416,15 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 .container {
-  min-height: 100vh;
+  /* 整屏高度：H5 端顶部有导航条要减掉，小程序端这两个变量为 0（原生导航在 webview 之外）。
+     用 var() 带兜底，两端都成立。
+     不要再写 min-height:100vh + 列表 calc(100vh - 固定值)：那套魔法数字一旦对不上，
+     列表底就会离屏幕底差一截，露出一条纯背景的灰带（实测差 143px）。 */
+  height: 100vh;
+  height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px));
+  display: flex;
+  flex-direction: column;
   background: #f5f5f5;
-  padding-bottom: 500rpx;
 }
 
 /* 仓库切换条 */
@@ -449,6 +501,9 @@ onMounted(async () => {
 
     .input {
       flex: 1;
+      /* 同 .form-item .input：uni-input 默认 1.4em 高会裁字，必须显式给高度 */
+      height: 44rpx;
+      line-height: 44rpx;
       font-size: 28rpx;
     }
 
@@ -468,8 +523,17 @@ onMounted(async () => {
 }
 
 .material-list {
+  /* 弹性填满「筛选条以下 → 屏幕底」的全部剩余空间，不再用 calc(100vh - N) */
+  flex: 1;
+  min-height: 0; /* flex 子项默认 min-height:auto，会被内容顶开导致整页可滚动 */
   padding: 20rpx;
-  height: calc(100vh - 690rpx);
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+}
+
+/* 面板打开时垫高列表，让最后一个物料也能滚到面板上方（面板是浮层，不占布局）。
+   高度对齐面板的 max-height(82vh)，这样任何屏幕尺寸下最后一张卡片都能滚出面板。 */
+.panel-spacer {
+  height: 82vh;
 }
 
 .material-item {
@@ -543,12 +607,48 @@ onMounted(async () => {
   bottom: 0;
   left: 0;
   right: 0;
+  z-index: 200;
   background: #fff;
   border-radius: 24rpx 24rpx 0 0;
-  padding: 30rpx;
+  padding: 16rpx 30rpx 30rpx;
   padding-bottom: calc(30rpx + constant(safe-area-inset-bottom));
   padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
   box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.1);
+  /* 小屏兜底：面板最高不超过视口 82%，装不下时面板内部滚动，按钮不会被顶出屏幕 */
+  max-height: 82vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+
+  /* 顶部把手 + 收起按钮：面板不再"只进不出" */
+  .panel-head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 56rpx;
+    margin-bottom: 10rpx;
+
+    .panel-grabber {
+      width: 80rpx;
+      height: 8rpx;
+      border-radius: 8rpx;
+      background: #dcdcdc;
+    }
+
+    .panel-close {
+      position: absolute;
+      right: -10rpx;
+      top: 0;
+      width: 56rpx;
+      height: 56rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30rpx;
+      color: #999;
+      line-height: 1;
+    }
+  }
 
   .selected-info {
     margin-bottom: 30rpx;
@@ -571,22 +671,38 @@ onMounted(async () => {
   }
 
   .form-group {
-    margin-bottom: 30rpx;
+    margin-bottom: 24rpx;
+
+    /* 并排一行：数量 + 单价 */
+    .form-row {
+      display: flex;
+      gap: 20rpx;
+
+      .form-item {
+        flex: 1;
+        min-width: 0;
+      }
+    }
 
     .form-item {
-      margin-bottom: 24rpx;
+      margin-bottom: 18rpx;
 
       .label {
         font-size: 26rpx;
         color: #666;
         display: block;
-        margin-bottom: 12rpx;
+        margin-bottom: 10rpx;
       }
 
       .input {
         background: #f5f5f5;
         border-radius: 12rpx;
-        padding: 20rpx 24rpx;
+        /* uni-app H5 给 uni-input 写死了 height:1.4em + overflow:hidden，
+           只写 padding 会被吃掉、文字被裁（实测外层框只有 22px、内层 input 只有 1px）。
+           这里显式给高度与行高，双端都成立，同时把点击热区做到 88rpx。 */
+        height: 88rpx;
+        line-height: 88rpx;
+        padding: 0 24rpx;
         font-size: 30rpx;
         width: 100%;
         box-sizing: border-box;
@@ -599,7 +715,10 @@ onMounted(async () => {
       .total-price {
         background: #f5f5f5;
         border-radius: 12rpx;
-        padding: 20rpx 24rpx;
+        height: 88rpx;
+        line-height: 88rpx;
+        padding: 0 24rpx;
+        box-sizing: border-box;
         font-size: 32rpx;
         font-weight: bold;
         color: #0B4F95;

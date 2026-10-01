@@ -214,7 +214,7 @@ async function submitPrice() {
     return
   }
 
-  uni.showLoading({ title: '保存中...' })
+  uni.showLoading({ title: '保存中...', mask: true })
   try {
     await inboundApi.updatePrice({ id: orderId.value, items: changed })
     uni.hideLoading()
