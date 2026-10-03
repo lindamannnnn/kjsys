@@ -98,6 +98,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { onPageShow as onShow } from '@/utils/on-page-show'
 import { formatDate, formatMoney } from '@/utils/format'
 import { statsApi, outboundApi, inboundApi } from '@/utils/api'
 
@@ -238,8 +239,14 @@ function rejectOrder(item) {
   })
 }
 
-onMounted(() => {
+// 首次进入即加载（onMounted 兜底，防止页面生命周期在某些端不触发导致空白）
+// 之后每次页面重新显示时刷新（含从子页面返回），所以点完确认回到工作台红点会同步
+const __pageShowHandler = () => {
   loadOrders()
+}
+onMounted(() => {
+  __pageShowHandler()      // 首屏一定加载（onMounted 兜底，不依赖任何注册成功与否）
+  onShow(__pageShowHandler)  // 之后每次页面重新显示（含从子页返回）都刷新
 })
 </script>
 

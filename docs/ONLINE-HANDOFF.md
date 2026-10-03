@@ -189,6 +189,91 @@ node scripts/pre-submit-check.js      # 复核产物 DEV_MODE 为 false
 | 入库页底部灰带修复（2026-10-01） | `miniprogram/src/pages/in/submit.vue` | 列表高度不再用 `calc(100vh - 690rpx)`，改「容器整屏 + 列表 flex:1」 |
 | 同类页面一并收掉（2026-10-01） | `pages/out/submit.vue`、`purchase/submit.vue`、`check/submit.vue`、`check/list.vue` | 同一个魔法数字根因；这 4 页底部有固定栏，列表另加等于栏高的 `padding-bottom` |
 | 清单抽屉空态瘦身（2026-10-01） | `pages/out/submit.vue`、`purchase/submit.vue` | 空清单不再展开抽屉（原本白占 60px 提示区、压住列表末条）；提示改由栏头承担 |
+| 页面返回不刷新修复（2026-10-01） | 16 个「列表 / 工作台」页（`storekeeper/{dashboard,pending,orders,stock}`、`boss/{dashboard,orders,stock,trend,warning}`、`check/list`、`in/history`、`out/history`、`purchase/{history,ledger}`、`my/profile`、`index/index`） | 数据加载从 Vue 的 `onMounted` 改成**页面显示钩子**，实现见 `miniprogram/src/utils/on-page-show.js`。修的是「仓管确认单据后返回工作台，待确认红点不消失」——`onMounted` 只在组件挂载时跑一次，从子页返回不重新挂载。**注意：① 不要用 `@dcloudio/uni-app` 的 `onShow`，真机会整页白屏；② 5 个详情页 + 3 个提交页刻意保留 `onMounted`，别顺手改掉**（理由见下方附录） |
+
+<details>
+<summary><b>附：页面返回后数据不刷新 —— 用什么替代 onShow、哪些页不改</b>（点开）</summary>
+
+**现象**：仓管在「待确认单据」里点确认，返回工作台，右上角红点数字还是旧的。
+
+**根因**：`onMounted` 是 **Vue 组件**生命周期，只在组件挂载时跑一次。
+小程序 `navigateTo` 出去再返回时，上一页还在**页面栈**里没被销毁，不会重新挂载 → 不会重跑 → 角标读的还是旧值。
+（接口和数据都是对的，只是页面没重新拉一次。）
+
+**⚠️ 不要用 `@dcloudio/uni-app` 的 `onShow`（真机会整页白屏）**
+
+第一版就是照官方文档写的 `import { onShow } from '@dcloudio/uni-app'`，结果真机上**整页白屏**。
+真机探针抓到的原始报错：
+
+```
+INDEX-EXPORTS :: e.onShow=undefined | e.onMounted=function | keys=...,onLaunch,onMounted,...
+INDEX-SETUP-ERROR :: TypeError: e.onShow is not a function
+```
+
+`onShow` 这个导出在编译产物里**没了**（编译期 tree-shaking、工具编译缓存代次不一致都会造成）。
+`setup` 第一句就抛错 → `render` 从未执行 → `setData` 从未发生 → 页面上只剩静态文字、`{{插值}}` 全空 —— 看起来就是白屏。
+**结论：「依赖 vendor 导出了某个 API」这条路本身就不稳，不要走。**
+
+**实际修法：自建页面钩子 `miniprogram/src/utils/on-page-show.js`**
+
+uni-app 给页面注入的生命周期是这样的（`Li` 里就有 `onShow`）：
+
+```js
+// vendor 里的实际实现
+Di(methods, Li)  →  methods.onShow = function (e) {
+                      return this.$vm && this.$vm.$callHook('onShow', e)
+                   }
+function $callHook(name, arg) { const list = this.$[name]; ... }   // 回调数组挂在 vm.$[name]
+```
+
+所以只要**往 `vm.$['onShow']` 里 push 一个回调**，页面每次显示就会被调用。
+这条路走的是框架自己的调用点，完全在运行时完成，**不受编译期摇树影响**。
+vm 从 `getCurrentPages()` 末项的 `$vm` 取（框架自己也是这么拿的），并校验 `typeof vm.$callHook === 'function'`；
+校验不过就返回 `false`（调用方兜底跑一次），绝不会把页面搞成白屏。
+
+页面里的用法（16 页统一）：
+
+```js
+import { ref, onMounted } from 'vue'
+import { onPageShow as onShow } from '@/utils/on-page-show'
+
+const __pageShowHandler = async () => { /* 拉数据 */ }
+
+onMounted(() => {
+  __pageShowHandler()        // 首屏一定加载（onMounted 兜底，不依赖注册是否成功）
+  onShow(__pageShowHandler)  // 之后每次页面重新显示（含从子页返回）都刷新
+})
+```
+
+**时序刚好，首屏不会重复请求**：`attached`（建立 `this.$vm`）→ `onLoad` → `onShow` → `ready`（`$callHook('mounted')`）。
+在 `onMounted` 里注册时，本页首次 `onShow` 已经过去了，所以只会在**之后的**重新显示时命中。
+
+**开发期注意**：微信开发者工具的热重载会拿同一个页面实例反复执行 `setup`，不处理的话回调会累积
+（实测 `len` 1→2→4，表现为「返回时同一批请求发好几次」）。util 内已用 `box.__onPageShowHandlers` 去重，生产冷启动时恒为 1 个。
+
+**哪些页刻意不改**（改了反而坏事）：
+- **详情页**（`in/out/check/purchase/detail`）：进入时靠 `getCurrentPages().$page.options.id` 定位单据，id 不变则数据不变
+- **提交页**（`in/out/purchase/submit`）：加载的是仓库/分类/物料/供应商等**表单基础数据**，
+  返回时重载会打断正在填写的表单，且提交成功后本就离开该页
+
+**验证方式（两层，缺一不可）**
+
+1. **本机跑真产物**：`node scripts/_run-mp-product.js`
+   在 Node 里 mock 出 `wx / App / Component`，驱动真实组件生命周期并 dump `data`。
+   关键断言：`vm.$['onShow']` 恰好 1 个回调；模拟「从子页返回」再触发一次 → 请求 +N、`setData` +N。
+
+2. **真机探针回传**：`node scripts/_inject-mp-probe.js` 注入页面产物，用 `wx.request` 把运行时数据打回本机
+   （`scripts/_mp-probe-server.js` 监听 127.0.0.1:8901，落 `.tmp-local-audit/mp-probe.log`）。
+   验完必须 `node scripts/_inject-mp-probe.js --revert` 还原并重建产物。
+   ⚠️ 该工具**只注入页面文件，不要注入 `app.js`** —— 真机上页面走 `appservice-hotreload` 通道、主包可能来自旧缓存，
+   两边代次不一致会得出错误结论。
+
+3. **端到端回归脚本**：`scripts/ui-repro-badge.js`（可反复跑）。
+   要点是**全程不能重新打开工作台**（`goto` / `reload` 会重新挂载，直接把问题掩盖掉），
+   必须走真实路径：首进工作台 → 点击「待确认单据」→ 点确认 → `goBack()` → 再读角标；
+   并同时读后端真值做对照（后端 5→4、页面 5→5，才说明是「页面没刷新」而不是「接口没生效」）。
+
+</details>
 
 <details>
 <summary><b>附：入库页列表底部「一大片空白」的根因与修法</b>（点开）</summary>
