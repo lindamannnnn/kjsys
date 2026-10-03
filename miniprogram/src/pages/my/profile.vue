@@ -181,8 +181,7 @@ watch(userInfo, (val) => {
 
 const roleText = computed(() => {
   const roleMap = {
-    'out': '车间员工',
-    'in': '仓库管理员',
+    'out': '领料员',
     'purchase': '采购员',
     'storekeeper': '仓管员',
     'boss': '老板',

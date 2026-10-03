@@ -22,24 +22,26 @@ require('../config/env')
 
 const { pool, queryOne, execute } = require('./pool')
 
-/* 开发身份清单：openid → 角色 + 可管仓库 */
+/* 开发身份清单：openid → 角色 + 可管仓库
+ *
+ * 流程重构 V2（2026-10-03）：
+ *   - 「出库员」改名为「领料员」（角色代码仍是 out）
+ *   - 「入库员 in」并入「仓管员 storekeeper」，因此这里移除 dev_in，
+ *     其原有权限由 dev_sk（仓管）覆盖。
+ *   ⚠️ 库里可能还残留旧账号与含 'in' 的 roles 数组，跑迁移脚本清理：
+ *        node src/db/migrate/2026-10-03-merge-in-role.js
+ */
 const DEV_USERS = [
   {
     openid: 'dev_worker_01',
     real_name: '开发·全能',
-    roles: ['out', 'in', 'storekeeper', 'purchase'],
+    roles: ['out', 'storekeeper', 'purchase'],
     warehouse_ids: [1, 2]
   },
   {
     openid: 'dev_out',
-    real_name: '开发·出库员',
+    real_name: '开发·领料员',
     roles: ['out'],
-    warehouse_ids: [1]
-  },
-  {
-    openid: 'dev_in',
-    real_name: '开发·入库员',
-    roles: ['in'],
     warehouse_ids: [1]
   },
   {

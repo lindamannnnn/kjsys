@@ -27,7 +27,7 @@
           <text class="feature-icon">🟢</text>
           <view class="feature-main">
             <text class="feature-name">领料出库</text>
-            <text class="feature-desc">车间员工提交领料单，仓库管理员审核后出库</text>
+            <text class="feature-desc">领料员提交领料单，仓管员确认后出库</text>
           </view>
         </view>
         <view class="feature-item">
@@ -109,11 +109,11 @@
         <view v-if="isOut" class="role-card role-card-out" @click="goOut">
           <view class="role-icon">🟢</view>
           <text class="role-title">领料出库</text>
-          <text class="role-desc">车间员工使用</text>
+          <text class="role-desc">领料员使用</text>
         </view>
 
-        <!-- 仓库入口 -->
-        <view v-if="isIn" class="role-card role-card-in" @click="goIn">
+        <!-- 仓库入口（入库归仓管员：原「入库员 in」角色已并入 storekeeper） -->
+        <view v-if="isStorekeeper" class="role-card role-card-in" @click="goIn">
           <view class="role-icon">🔵</view>
           <text class="role-title">入库登记</text>
           <text class="role-desc">仓库管理员使用</text>
@@ -141,7 +141,7 @@
         </view>
 
         <!-- 盘点入口（仓库和老板可见） -->
-        <view v-if="hasRole(['in', 'storekeeper', 'boss'])" class="role-card role-card-check" @click="goCheck">
+        <view v-if="hasRole(['storekeeper', 'boss'])" class="role-card role-card-check" @click="goCheck">
           <view class="role-icon">📋</view>
           <text class="role-title">库存盘点</text>
           <text class="role-desc">盘点任务与录入</text>
@@ -149,7 +149,7 @@
 
         <!-- 库存流水（采购对账、仓管核流水、老板查账都能用） -->
         <view
-          v-if="hasRole(['purchase', 'storekeeper', 'in', 'boss'])"
+          v-if="hasRole(['purchase', 'storekeeper', 'boss'])"
           class="role-card role-card-ledger"
           @click="goLedger"
         >
@@ -158,6 +158,14 @@
           <text class="role-desc">每笔出入库可追溯</text>
         </view>
       </view>
+    </view>
+
+    <!-- 消息中心入口（流程重构 V2 · P1）：未读数红点 -->
+    <view v-if="isLoggedIn && !isPending" class="msg-entry" @click="goMessage">
+      <text class="msg-entry-icon">🔔</text>
+      <text class="msg-entry-text">消息</text>
+      <view v-if="unreadCount > 0" class="msg-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</view>
+      <text class="msg-entry-arrow">›</text>
     </view>
 
     <!-- 底部用户信息 -->
@@ -173,7 +181,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { onPageShow as onShow } from '@/utils/on-page-show'
 import { useUserStore } from '@/store/user'
-import { warehouseApi, outboundApi } from '@/utils/api'
+import { warehouseApi, outboundApi, messageApi } from '@/utils/api'
 
 const userStore = useUserStore()
 
@@ -181,6 +189,8 @@ const companyName = ref('胜龙汽配')
 const warehouseList = ref([])
 // 近 7 天自己提交、被仓管驳回的出库单
 const notices = ref([])
+// 未读消息数（首页红点，流程重构 V2 · P1 消息中心）
+const unreadCount = ref(0)
 
 async function loadNotices() {
   if (!userStore.isLoggedIn) return
@@ -191,6 +201,21 @@ async function loadNotices() {
     // 提醒拿不到不影响主流程，安静跳过
     notices.value = []
   }
+}
+
+// 未读消息数：首页红点用。拿不到就当作 0，不打扰用户
+async function loadUnread() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await messageApi.unreadCount()
+    unreadCount.value = res.unread || 0
+  } catch (err) {
+    unreadCount.value = 0
+  }
+}
+
+function goMessage() {
+  uni.navigateTo({ url: '/pages/message/list' })
 }
 
 function showNotices() {
@@ -210,7 +235,6 @@ const isLoading = computed(() => userStore.isLoading)
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const isPending = computed(() => userStore.isPending)
 const isOut = computed(() => userStore.isOut)
-const isIn = computed(() => userStore.isIn)
 const isPurchase = computed(() => userStore.isPurchase)
 const isStorekeeper = computed(() => userStore.isStorekeeper)
 const isBoss = computed(() => userStore.isBoss)
@@ -221,8 +245,7 @@ const hasRole = (list) => userStore.hasRole(list)
 
 const roleText = computed(() => {
   const roleMap = {
-    'out': '车间员工',
-    'in': '仓库管理员',
+    'out': '领料员',
     'purchase': '采购员',
     'storekeeper': '仓管员',
     'boss': '老板',
@@ -298,6 +321,7 @@ const __pageShowHandler = async () => {
   if (userStore.isLoggedIn) {
     loadWarehouses()
     loadNotices()
+    loadUnread()   // 未读消息红点（从消息页返回时也会刷新）
   }
 }
 onMounted(() => {
@@ -580,6 +604,45 @@ onMounted(() => {
     font-size: 24rpx;
     color: rgba(255, 255, 255, 0.8);
     display: block;
+  }
+}
+
+.msg-entry {
+  display: flex;
+  align-items: center;
+  margin-top: 60rpx;
+  padding: 26rpx 30rpx;
+  background: #fff;
+  border-radius: 16rpx;
+
+  .msg-entry-icon {
+    font-size: 32rpx;
+    margin-right: 16rpx;
+  }
+
+  .msg-entry-text {
+    flex: 1;
+    font-size: 28rpx;
+    color: #333;
+    font-weight: 500;
+  }
+
+  .msg-badge {
+    min-width: 36rpx;
+    height: 36rpx;
+    line-height: 36rpx;
+    padding: 0 10rpx;
+    border-radius: 18rpx;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 22rpx;
+    text-align: center;
+  }
+
+  .msg-entry-arrow {
+    font-size: 32rpx;
+    color: #ccc;
+    margin-left: 12rpx;
   }
 }
 

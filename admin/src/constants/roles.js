@@ -1,19 +1,14 @@
 /**
  * 系统固定角色（与后端 user.js VALID_ROLES 保持一致）
- * 角色不支持自定义增删，只能给用户分配这 6 种
+ * 角色不支持自定义增删，只能给用户分配这 5 种
+ * （原「入库员 in」已按流程重构 V2 并入「仓管员 storekeeper」，2026-10-03）
  */
 export const ROLES = [
   {
     value: 'out',
-    label: '出库员',
+    label: '领料员',
     tag: 'success',
-    description: '小程序提交出库单、查看自己的出库记录'
-  },
-  {
-    value: 'in',
-    label: '入库员',
-    tag: 'primary',
-    description: '小程序提交入库单、修改当天入库单价'
+    description: '小程序提交领料单（出库）、查看自己的领料记录'
   },
   {
     value: 'purchase',

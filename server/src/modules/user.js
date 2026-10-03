@@ -7,7 +7,9 @@ const { ok, fail } = require('../utils/response')
 const { toApi, toDbId, num, paging } = require('../utils/format')
 const { operatorOf, isManagement, MANAGEMENT_ROLES, identityOf } = require('../middleware/auth')
 
-const VALID_ROLES = ['out', 'in', 'purchase', 'storekeeper', 'boss', 'admin']
+// 流程重构 V2（2026-10-03）：原 'in'（入库员）已并入 'storekeeper'（仓管员），
+// 入库相关权限统一收敛到仓管；角色的增删走这里 + admin/src/constants/roles.js 两处同步。
+const VALID_ROLES = ['out', 'purchase', 'storekeeper', 'boss', 'admin']
 
 /**
  * 该用户是否是「系统里最后一个仍在启用状态的管理账号」

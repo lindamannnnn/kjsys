@@ -12,13 +12,15 @@
     "db:seed": "node src/db/seed.js",
     "seed:dev": "node src/db/seed-dev.js",
     "db:reset-admin": "node src/db/reset-admin.js",
+    "db:merge-in-role": "node src/db/migrate-merge-in-role.js",
     "import:materials": "node src/db/import-materials.js",
     "apply:subcategory": "node src/db/apply-subcategory.js",
     "apply:code": "node src/db/apply-material-code.js",
     "verify": "node src/db/verify.js",
     "test:api": "node tests/api-test.js",
     "test:contract": "node tests/verify-frontend-contracts.js",
-    "audit:data": "node tests/data-audit.js"
+    "audit:data": "node tests/data-audit.js",
+    "db:apply-messages": "node src/db/apply-messages-table.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

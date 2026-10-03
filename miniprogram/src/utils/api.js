@@ -86,6 +86,14 @@ export const userApi = {
   logs: (data) => callCloud('user', 'logs', data)
 }
 
+// 站内消息（流程重构 V2 · P1）：只能查/改自己的消息，服务端强制按登录人过滤
+export const messageApi = {
+  list: (data) => callCloud('message', 'list', data),
+  unreadCount: () => callCloud('message', 'unreadCount'),
+  markRead: (data) => callCloud('message', 'markRead', data),
+  markAllRead: () => callCloud('message', 'markAllRead')
+}
+
 /* ------------------------------------------------------------
  * 通用工具
  * ------------------------------------------------------------ */

@@ -536,14 +536,14 @@ module.exports = {
   roleRules: {
     overview: ['boss', 'admin', 'storekeeper'],
     trend: ['boss', 'admin'],
-    stockList: ['boss', 'admin', 'storekeeper', 'in', 'out', 'purchase'],
+    stockList: ['boss', 'admin', 'storekeeper', 'out', 'purchase'],
     // 整改 P1-12：采购员月底对账要看出库单与库存流水，放开只读权限（数据范围仍受仓库限制）
     orderFlow: ['boss', 'admin', 'storekeeper', 'purchase'],
     warning: ['boss', 'admin', 'storekeeper', 'purchase'],
     stockFlow: ['boss', 'admin', 'storekeeper', 'purchase'],
     materialRank: ['boss', 'admin'],
     operatorStats: ['boss', 'admin'],
-    warehouseSummary: ['boss', 'admin', 'storekeeper', 'in', 'out', 'purchase']
+    warehouseSummary: ['boss', 'admin', 'storekeeper', 'out', 'purchase']
   },
   actions: {
     overview, trend, stockList, orderFlow, warning, stockFlow,

@@ -55,12 +55,13 @@ export function setDevOpenid(openid) {
 }
 
 /** 可选开发身份清单（与 server/src/db/seed-dev.js 一一对应） */
+// 流程重构 V2（2026-10-03）：出库员 → 领料员；入库员（dev_in）并入仓管员，故移除该项。
+// desc 只写「当前已实现」的能力，未实现的新流程（拣货/收货/采购任务）不要写进来，免得测试时误判。
 export const DEV_IDENTITIES = [
-  { openid: 'dev_worker_01', label: '全能', desc: '出库 + 入库 + 仓管 + 采购' },
-  { openid: 'dev_out', label: '出库员', desc: '只提交出库单' },
-  { openid: 'dev_in', label: '入库员', desc: '只提交入库单' },
-  { openid: 'dev_sk', label: '仓管', desc: '确认/驳回单据、盘点' },
-  { openid: 'dev_purchase', label: '采购', desc: '采购入库、库存流水对账' },
+  { openid: 'dev_worker_01', label: '全能', desc: '领料 + 仓管 + 采购' },
+  { openid: 'dev_out', label: '领料员', desc: '提交领料单（出库）' },
+  { openid: 'dev_sk', label: '仓管', desc: '确认/驳回单据、入库、盘点' },
+  { openid: 'dev_purchase', label: '采购', desc: '入库登记、库存流水对账' },
   { openid: 'dev_boss', label: '老板', desc: '看板、预警、全部单据' }
 ]
 

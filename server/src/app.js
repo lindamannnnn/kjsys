@@ -35,7 +35,8 @@ const modules = [
   require('./modules/user'),
   require('./modules/supplier'),
   require('./modules/warehouse'),
-  require('./modules/upload')
+  require('./modules/upload'),
+  require('./modules/message')
 ]
 
 const app = express()

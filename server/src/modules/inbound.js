@@ -681,9 +681,11 @@ module.exports = {
   name: 'inbound',
   publicActions: [],
   roleRules: {
-    submit: ['in', 'purchase', 'storekeeper', 'boss', 'admin'],
+    // 流程重构 V2（2026-10-03）：入库归仓管员，原 'in'（入库员）已并入 'storekeeper'。
+    // 'purchase' 暂时保留（采购员只管买的改造在 P4 阶段做，此处不提前收紧）。
+    submit: ['purchase', 'storekeeper', 'boss', 'admin'],
     confirm: ['storekeeper', 'boss', 'admin'],
-    updatePrice: ['in', 'purchase', 'boss', 'admin', 'storekeeper']
+    updatePrice: ['purchase', 'boss', 'admin', 'storekeeper']
   },
   actions: { submit, list, detail, updatePrice, confirm, cancel, pendingCount }
 }

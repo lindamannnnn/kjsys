@@ -14,7 +14,8 @@ export const useUserStore = defineStore('user', () => {
   // 计算属性
   const isBoss = computed(() => roles.value.includes('boss'))
   const isOut = computed(() => roles.value.includes('out'))
-  const isIn = computed(() => roles.value.includes('in'))
+  // 流程重构 V2（2026-10-03）：原 isIn（入库员）已并入仓管员，
+  // 首页「入库登记」入口改用 isStorekeeper，此处不再单独暴露 isIn。
   const isPurchase = computed(() => roles.value.includes('purchase'))
   const isStorekeeper = computed(() => roles.value.includes('storekeeper'))
   const isAdmin = computed(() => roles.value.includes('admin'))
@@ -140,7 +141,6 @@ export const useUserStore = defineStore('user', () => {
     isLoading,
     isBoss,
     isOut,
-    isIn,
     isPurchase,
     isStorekeeper,
     isAdmin,
