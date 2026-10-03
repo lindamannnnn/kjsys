@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>胜龙进销存 · 前后端全量测试报告（2026-10-01）</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --line:#e5e7eb; --text:#1f2328; --sub:#656d76;
+    --green:#1a7f37; --greenbg:#dafbe1; --red:#cf222e; --redbg:#ffebe9;
+    --amber:#9a6700; --amberbg:#fff8c5; --blue:#0969da; --bluebg:#ddf4ff;
+    --gray:#6e7781; --graybg:#f0f1f3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.65;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  header{background:linear-gradient(135deg,#7c3aed 0%,#db2777 100%);color:#fff;border-radius:16px;padding:28px 30px;margin-bottom:24px}
+  header h1{margin:0 0 8px;font-size:24px;font-weight:700}
+  header .meta{font-size:13px;opacity:.92}
+  .verdict{display:flex;gap:14px;flex-wrap:wrap;margin-top:18px}
+  .verdict div{background:rgba(255,255,255,.16);border-radius:10px;padding:10px 16px;font-size:13px}
+  .verdict b{display:block;font-size:21px;font-weight:700;line-height:1.3}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
+  h2{font-size:18px;margin:0 0 16px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  h3{font-size:15px;margin:20px 0 10px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 4px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#fafbfc;font-weight:600;color:var(--sub);font-size:13px;white-space:nowrap}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+  .p-ok{background:var(--greenbg);color:var(--green)}
+  .p-bad{background:var(--redbg);color:var(--red)}
+  .p-warn{background:var(--amberbg);color:var(--amber)}
+  .p-info{background:var(--bluebg);color:var(--blue)}
+  .p-gray{background:var(--graybg);color:var(--gray)}
+  .issue{border-left:4px solid var(--line);padding:2px 0 2px 16px;margin:18px 0}
+  .issue.high{border-color:var(--red)}
+  .issue.mid{border-color:#d4a72c}
+  .issue.low{border-color:var(--blue)}
+  .issue h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .issue p{margin:6px 0}
+  .issue ul{margin:6px 0;padding-left:20px}
+  code{background:#f2f3f5;padding:1.5px 5px;border-radius:4px;font-size:13px;
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  pre{background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:12px 14px;
+    overflow-x:auto;font-size:12.5px;line-height:1.5;margin:8px 0}
+  pre code{background:none;padding:0}
+  .note{background:#f6f8fa;border-radius:10px;padding:14px 18px;font-size:13.5px;color:var(--sub);margin-top:14px}
+  .scripts{font-size:13.5px}
+  .scripts td:first-child{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:nowrap}
+  footer{text-align:center;color:var(--sub);font-size:12.5px;margin-top:28px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>胜龙进销存 · 前后端全量测试报告</h1>
+  <div class="meta">测试时间：2026-10-01 20:17 ~ 20:40 &nbsp;|&nbsp; 测试环境：本地（后端 127.0.0.1:3000 + MySQL 3307）&nbsp;|&nbsp; 数据零污染生产</div>
+  <div class="verdict">
+    <div><b>522</b>测试断言</div>
+    <div><b>0</b>失败</div>
+    <div><b>79</b>页面/场景通过</div>
+    <div><b>5</b>问题待处理</div>
+  </div>
+</header>
+
+<div class="card">
+  <h2>一句话结论</h2>
+  <p><b>功能层面全部可用，前后端跑通无失败。</b>后端 63 个接口中的每一个都被真实调用验证过；小程序 34 个页面、后台 18 个页面全部正常渲染；采购入库→出库→驳回→盘点→审核→老板报表的完整业务链数据前后一致（流水累加 = 当前库存）。</p>
+  <p>但<b>发现 1 个真实的数据越权问题</b>：还没被管理员审核通过的「待审核用户」，可以直接读取公司的物料档案、供应商、仓库和全部单据列表。这个必须在提审前处理。另有 4 个次要问题与体验缺陷，详见下文。</p>
+</div>
+
+<div class="card">
+  <h2>一、测试总览</h2>
+  <table>
+    <thead><tr><th>测试层面</th><th>覆盖内容</th><th class="num">断言数</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>后端接口回归（4 套件）</td><td>认证/物料/入库/出库/库存/幂等/权限/盘点/统计/用户/供应商/仓库</td><td class="num">330</td><td><span class="pill p-ok">全通过</span></td></tr>
+      <tr><td>接口覆盖缺口补测</td><td>63 个接口中此前<b>从未被测试</b>的 16 个（登录注册、上传、用户审批、删除类等）</td><td class="num">69</td><td><span class="pill p-ok">全通过</span></td></tr>
+      <tr><td>端到端业务流串联</td><td>建档→入库→确认→出库→驳回→撤销→盘点→审核→老板报表→账实一致性</td><td class="num">64</td><td><span class="pill p-ok">全通过</span></td></tr>
+      <tr><td>小程序页面遍历（真机视口 390×844）</td><td>27 个页面 × 6 种身份 = 34 次页面检查（含带真实单据的详情页）</td><td class="num">34 页</td><td><span class="pill p-ok">无报错</span></td></tr>
+      <tr><td>登录流程与角色隔离</td><td>未登录引导、6 种身份首页入口差异、越权访问表现</td><td class="num">24</td><td><span class="pill p-ok">全通过</span></td></tr>
+      <tr><td>Web 后台遍历（1440×900）</td><td>18 个菜单页面：布局、表格数据、接口调用</td><td class="num">18 页</td><td><span class="pill p-ok">无报错</span></td></tr>
+      <tr><td>生产环境只读冒烟</td><td>119.91.206.235：健康检查、未登录拦截</td><td class="num">2</td><td><span class="pill p-ok">正常</span></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>为什么能确定结果是真的？</b>每一项断言都核对数据库里的真实数据，不是只看接口返回的「成功」。页面遍历也逐页截了图（共 52 张），并抽查确认每一页画面各不相同、数据真实（例如仓管待办页确实显示出了测试中提交的单据）。<br>
+    <b>覆盖率的提升：</b>新增接口覆盖审计脚本，发现 63 个后端接口里有 16 个从未被任何测试触碰过——包括「登录」和「注册」这两个每天都要用的接口。
+  </div>
+</div>
+
+<div class="card">
+  <h2>二、发现的问题</h2>
+
+  <div class="issue high">
+    <h3><span class="pill p-bad">严重</span> AUTHZ-01：未审核用户能读取公司经营数据</h3>
+    <p><b>现象：</b>任何人扫码进入小程序，系统会自动为其建档（状态「待审核」、无角色）。这个本不该看到任何业务数据的人，实际上可以直接拉取：</p>
+    <pre><code>material.list        物料档案（含编码、规格、库存、成本）
+material.categories  物料分类
+supplier.list        供应商列表
+supplier.search      供应商搜索
+warehouse.list       仓库列表
+inbound.list         入库单列表
+outbound.list        出库单列表
+check.list           盘点单列表</code></pre>
+    <p><b>原因：</b><code>server/src/app.js</code> 的登录校验只拦了 <code>status === 'disabled'</code>，没有拦 <code>status === 'pending'</code>；而上述 8 个查询接口没有配置角色要求，于是两道门都放行了。</p>
+    <p><b>影响：</b>物料档案、供应商名单、单据流水属于公司经营信息。虽然写入操作仍被角色校验拦住（已验证），但只读数据已经泄露。</p>
+    <p><b>修复建议：</b>在 app.js 的登录校验里补上 pending 拦截，并把登录/注册/查自己信息几个接口加入白名单：</p>
+    <pre><code>// server/src/app.js 登录校验处
+const PENDING_EXEMPT = ['login', 'register', 'getUserInfo', 'updateProfile', 'myLogs']
+if (!isPublic &amp;&amp; ctx.user.status === 'pending' &amp;&amp; !PENDING_EXEMPT.includes(action)) {
+  return res.json(fail(403, '账号正在审核中，请联系管理员开通权限'))
+}</code></pre>
+    <p class="note" style="margin-top:10px">修复后需要同步确认前端：待审核用户进入首页时应当被引导到「等待审核」提示，而不是空白报错页。</p>
+  </div>
+
+  <div class="issue low">
+    <h3><span class="pill p-warn">轻微</span> AUTHZ-02：被禁用的员工仍能登录成功</h3>
+    <p><b>现象：</b>管理员把某人禁用后，该员工打开小程序依然能登录成功、拿到自己的角色列表和令牌，只是接下来每次调用接口才会被拒绝（403「账号已被禁用」）。</p>
+    <p><b>影响：</b>数据没有泄露（接口层拦住了，已验证），但体验很差：员工能看到完整的功能界面，点什么都报错，还会来问「为什么用不了」。</p>
+    <p><b>修复建议：</b>在 <code>auth.login</code> 里查到用户后，若 <code>status === 'disabled'</code> 就直接返回拒绝，不签发令牌。</p>
+  </div>
+
+  <div class="issue low">
+    <h3><span class="pill p-warn">轻微</span> UX-01：越权打开页面时显示「0」而不是「无权限」</h3>
+    <p><b>现象：</b>出库员手动输入老板看板的网址，接口正确返回 403，但界面上显示的是一排「0」（今日出库单数 0、库存总量 0……），看起来像「公司真的一单都没有」。</p>
+    <p><b>影响：</b>用户会误判成数据丢失，也可能反复来问。属于误导性展示。</p>
+    <p><b>修复建议：</b>接口返回 403 时，页面展示「暂无权限查看，请联系管理员」的提示态，而不是把空值当数据渲染。</p>
+  </div>
+
+  <div class="issue low">
+    <h3><span class="pill p-info">开发环境</span> DEV-01：5173 端口被两个服务抢占</h3>
+    <p><b>现象：</b>本机 <code>localhost:5173</code> 打开的是小程序首页，而 <code>127.0.0.1:5173</code> 打开的才是后台管理。<code>localhost</code> 解析到 IPv6 后被小程序的 dev server 接管，后台的 dev server 只绑在 IPv4 上。</p>
+    <p><b>影响：</b>不影响线上，但会导致「明明改了后台代码却看不到效果」这类排查困难。本次测试第一遍就被它骗过——报告显示后台 18 个页面全部「正常」，实际上一个后台页面都没打开。</p>
+    <p><b>修复建议：</b>给两个 dev server 固定不同端口（例如后台 5188、小程序 5199），或在文档里标注必须用 <code>127.0.0.1</code>。</p>
+  </div>
+
+  <div class="issue low">
+    <h3><span class="pill p-gray">代码整洁</span> DEAD-01：后台装了图表库但一个图表都没用</h3>
+    <p><b>现象：</b><code>admin/package.json</code> 引入了 <code>echarts</code> 与 <code>vue-echarts</code>，但 18 个页面里没有任何一页使用图表，统计全部用表格呈现。</p>
+    <p><b>影响：</b>仅是打包体积与依赖维护成本，不影响功能。<b>若老板希望看板有折线图/柱状图，这里是可以直接用的。</b></p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>三、本次验证过的关键能力（节选）</h2>
+  <table>
+    <thead><tr><th>能力</th><th>验证方式</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>移动加权平均成本</td><td>100 个 @12.5 + 100 个 @17.5 → 均值应为 15</td><td><span class="pill p-ok">= 15</span></td></tr>
+      <tr><td>幂等防重复提交</td><td>同一 request_id 提交两次，库存只扣一次</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>超库存出库拦截</td><td>出 999999 个 → 拒绝且库存不变</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>驳回 / 撤销回补库存</td><td>驳回 +20、撤销 +5 均正确回补</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>盘点需审核才生效</td><td>提交盘点后库存不变，审核后以盘为准（170→163）</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>账实一致性</td><td>库存流水累加 = 当前库存</td><td><span class="pill p-ok">相等</span></td></tr>
+      <tr><td>操作留痕可追责</td><td>入库单确认人、操作日志可查</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>仓库级数据隔离</td><td>无权限仓库的单据被拒绝操作</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>角色界面隔离</td><td>出库员首页仅见出库入口；老板见老板入口；多角色见到全部</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>上传安全</td><td>拒绝 .exe、拒绝目录穿越、未登录拒绝、上传后可访问、删除后文件消失</td><td><span class="pill p-ok">通过</span></td></tr>
+      <tr><td>防锁死保护</td><td>不能禁用自己、不能降级最后一个管理员</td><td><span class="pill p-ok">通过</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>四、新增的测试脚本（可反复运行）</h2>
+  <table class="scripts">
+    <thead><tr><th>脚本</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr><td>scripts/audit-api-coverage.js</td><td>审计后端 63 个接口，找出从未被测试的那些</td></tr>
+      <tr><td>server/tests/gap-api-test.js</td><td>补齐 16 个缺口接口的测试（69 项断言）</td></tr>
+      <tr><td>server/tests/_probe-authz.js</td><td>越权取证探针（待审核用户/禁用用户能碰到什么）</td></tr>
+      <tr><td>scripts/e2e-business-flow.js</td><td>端到端业务流串联（64 项断言，会留下真实单据供界面测试）</td></tr>
+      <tr><td>scripts/ui-sweep-all-pages.js</td><td>小程序 27 页 × 各身份遍历 + 逐页截图（接口自动重定向到本地，不碰生产）</td></tr>
+      <tr><td>scripts/ui-sweep-admin.js</td><td>后台 18 页遍历（<b>必须用 127.0.0.1</b>，见 DEV-01）</td></tr>
+      <tr><td>scripts/ui-role-isolation.js</td><td>登录流程 + 角色界面隔离验证</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    跑法：<code>cd server &amp;&amp; node tests/gap-api-test.js</code>、<code>node scripts/e2e-business-flow.js</code>；
+    页面类脚本需要先起 H5 dev server（5199）与后台 dev server，并用
+    <code>NODE_PATH=C:/Users/kass/.workbuddy/binaries/node/workspace/node_modules</code> 运行。
+  </div>
+</div>
+
+<div class="card">
+  <h2>五、本次未覆盖的部分</h2>
+  <ul>
+    <li><b>微信真机登录</b>：本地测试走的是开发身份登录（<code>dev_openid</code>），真实的 <code>wx.login</code> 换 openid 需要在小程序里用真机/开发者工具验证。</li>
+    <li><b>支付、消息推送</b>：当前版本没有这些模块。</li>
+    <li><b>真机触屏手势</b>：页面遍历在浏览器真机视口下完成，不是微信客户端内核，个别原生组件表现可能有差异。</li>
+    <li><b>压测/长时间稳定性</b>：本次是功能正确性测试，未做并发压测（并发安全有专项用例，已通过）。</li>
+  </ul>
+</div>
+
+<footer>胜龙进销存 · 全量测试报告 · 生成于 2026-10-01 20:40</footer>
+
+</div>
+</body>
+</html>
