@@ -49,6 +49,31 @@
         <text class="tip">提交后请等待管理员审核</text>
       </view>
 
+      <!--
+        测试账号一键登录（仅开发/测试构建可见）
+        上线前用 npm run build:mp-weixin 出正式包时 DEV_MODE=false，这一整块会自动消失，
+        不会被审核员看到，也不构成「绕过微信登录」的入口。
+      -->
+      <view v-if="DEV_MODE" class="dev-login">
+        <view class="dev-head">
+          <text class="dev-head-title">测试账号</text>
+          <text class="dev-head-sub">点一下即以该岗位登录，无需微信授权</text>
+        </view>
+        <view class="dev-grid">
+          <view
+            v-for="d in DEV_IDENTITIES"
+            :key="d.openid"
+            class="dev-btn"
+            :class="{ on: d.openid === currentDevOpenid }"
+            @click="handleDevLogin(d)"
+          >
+            <text class="dev-btn-label">{{ d.label }}</text>
+            <text class="dev-btn-desc">{{ d.desc }}</text>
+          </view>
+        </view>
+        <text class="dev-note">账号由 npm run seed:dev 创建；正式包不包含本区域</text>
+      </view>
+
       <!-- 协议同意（合规要求：不得默认勾选，必须由用户主动选择） -->
       <view class="agree-row">
         <view class="agree-box" :class="{ on: agreed }" @click="toggleAgree">
@@ -73,6 +98,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useUserStore } from '@/store/user'
+import { DEV_MODE, DEV_IDENTITIES, getDevOpenid, setDevOpenid } from '@/utils/cloud'
 
 const userStore = useUserStore()
 
@@ -118,6 +144,38 @@ function goHome() {
     uni.reLaunch({ url: roleHome[hit] })
   } else {
     uni.switchTab({ url: '/pages/index/index' })
+  }
+}
+
+/* 当前测试身份（用于按钮高亮） */
+const currentDevOpenid = ref(getDevOpenid())
+
+/**
+ * 测试账号一键登录
+ * 刻意不检查协议勾选：这条通道只存在于开发/测试包里，不面向真实用户，
+ * 每换一个岗位都要先勾一次协议会拖慢验收节奏。
+ */
+async function handleDevLogin(d) {
+  if (!d) return
+
+  try {
+    uni.showLoading({ title: `以${d.label}登录…`, mask: true })
+    setDevOpenid(d.openid)   // 先记住身份，loginWithWechat 会拿它去换令牌
+    userStore.logout()       // 清掉上一个身份的令牌，避免两个岗位串号
+    const res = await userStore.login()
+    currentDevOpenid.value = d.openid
+    uni.hideLoading()
+
+    if (res && (res.isNew || res.needRegister)) {
+      needProfile.value = true
+      return
+    }
+
+    uni.showToast({ title: `已登录：${d.label}`, icon: 'none' })
+    setTimeout(goHome, 700)
+  } catch (err) {
+    uni.hideLoading()
+    uni.showToast({ title: err.message || '登录失败', icon: 'none' })
   }
 }
 
@@ -273,6 +331,77 @@ async function handleSubmitProfile() {
     text-align: center;
     display: block;
     margin-top: 30rpx;
+  }
+}
+
+/* 测试账号区（仅开发/测试包可见，正式包里 DEV_MODE=false 不渲染） */
+.dev-login {
+  margin-top: 44rpx;
+  padding: 28rpx 24rpx 12rpx;
+  border: 2rpx dashed rgba(255, 255, 255, 0.28);
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.05);
+
+  .dev-head {
+    margin-bottom: 22rpx;
+
+    .dev-head-title {
+      font-size: 28rpx;
+      font-weight: bold;
+      color: #fff;
+      display: block;
+      margin-bottom: 8rpx;
+    }
+
+    .dev-head-sub {
+      font-size: 22rpx;
+      color: rgba(255, 255, 255, 0.55);
+      display: block;
+    }
+  }
+
+  .dev-grid {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .dev-btn {
+    width: calc(50% - 10rpx);
+    box-sizing: border-box;
+    margin-bottom: 20rpx;
+    padding: 20rpx 18rpx;
+    border-radius: 12rpx;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2rpx solid rgba(255, 255, 255, 0.16);
+
+    &:nth-child(odd) {
+      margin-right: 20rpx;
+    }
+
+    &.on {
+      border-color: #07c160;
+      background: rgba(7, 193, 96, 0.16);
+    }
+
+    .dev-btn-label {
+      font-size: 28rpx;
+      color: #fff;
+      display: block;
+      margin-bottom: 6rpx;
+    }
+
+    .dev-btn-desc {
+      font-size: 20rpx;
+      line-height: 1.4;
+      color: rgba(255, 255, 255, 0.5);
+      display: block;
+    }
+  }
+
+  .dev-note {
+    font-size: 20rpx;
+    color: rgba(255, 255, 255, 0.35);
+    display: block;
   }
 }
 
