@@ -10,11 +10,15 @@
           class="input"
           placeholder="搜索物料名称/规格"
           placeholder-class="placeholder"
-          @input="onSearch"
+          @input="onSearchInput"
         />
       </view>
       <view class="scan-btn" @click="onScan">
         <text>📷</text>
+      </view>
+      <!-- 新增入库项目：搜不到就地在入库页建档（面板式，不跳页），建完自动选中直接入 -->
+      <view class="add-material-btn" @click="openCreate">
+        <text>＋新增</text>
       </view>
     </view>
 
@@ -61,6 +65,17 @@
         class="material-item"
         @click.stop="onSelectMaterial(item)"
       >
+        <!-- 物料照片缩略图（无照片时同尺寸占位，保证列表高度稳定）；点在图上只看大图，不加进清单 -->
+        <image
+          v-if="item.image_fileid"
+          class="material-thumb"
+          :src="fullFileUrl(item.image_fileid)"
+          mode="aspectFill"
+          @click.stop="previewMaterial(item)"
+        />
+        <view v-else class="material-thumb material-thumb-empty">
+          <text>无图</text>
+        </view>
         <view class="material-info">
           <text class="material-name">{{ item.name }}</text>
           <text class="material-spec">{{ item.material_no ? item.material_no + ' · ' : '' }}{{ item.spec || '无规格' }}</text>
@@ -76,13 +91,16 @@
         <text>加载中...</text>
       </view>
 
-      <view v-else-if="noMore" class="no-more">
-        <text>没有更多了</text>
-      </view>
-
+      <!-- 空列表优先于「没有更多了」：搜不到东西时要给「就地新建」的出路，
+           否则 noMore 分支会把空态永远挡住 -->
       <view v-else-if="materialList.length === 0" class="empty">
         <text class="empty-icon">📦</text>
-        <text class="empty-text">暂无物料</text>
+        <text class="empty-text">{{ keyword ? `没找到「${keyword}」` : '暂无物料' }}</text>
+        <view class="empty-create" @click="openCreate">＋ 就地新建这个物料的档案</view>
+      </view>
+
+      <view v-else-if="noMore" class="no-more">
+        <text>没有更多了</text>
       </view>
 
       <!-- 垫底：面板是浮在列表上的，垫高后最后几个物料也能滚到面板上方点到 -->
@@ -138,13 +156,27 @@
         </view>
 
         <view class="form-item">
-          <text class="label">供应商（选填）</text>
+          <!-- 2026-10-09：原先只能纯手输供应商，同一个供应商写法五花八门、对账难做。
+               现在可手输也可从档案里选（选完仍可改），并记住上次用的。 -->
+          <view class="label-row">
+            <text class="label">供应商（选填）</text>
+            <text class="pick-link" @click="openSupplierModal">从档案选择</text>
+          </view>
           <input
             v-model="supplier"
             class="input"
-            placeholder="请输入供应商名称"
+            placeholder="可直接手输，或点右上角从档案选择"
             placeholder-class="placeholder"
           />
+          <view v-if="recentSuppliers.length" class="chip-wrap recent-suppliers">
+            <view
+              v-for="s in recentSuppliers"
+              :key="'recent-' + s"
+              class="chip small"
+              :class="{ active: supplier === s }"
+              @click="supplier = s"
+            >{{ s }}</view>
+          </view>
         </view>
 
         <view class="form-item">
@@ -166,12 +198,167 @@
         提交入库
       </button>
     </view>
+
+    <!-- 新建物料档案面板：入库页就地建档，建完自动选中，接着填数量单价就能入 -->
+    <view v-if="showCreate" class="submit-panel">
+      <view class="panel-head">
+        <view class="panel-grabber"></view>
+        <view class="panel-close" @click.stop="closeCreate">
+          <text>✕</text>
+        </view>
+      </view>
+
+      <view class="selected-info">
+        <text class="selected-name">新建物料档案</text>
+        <text class="selected-stock">建好后自动选中，直接填数量单价入库</text>
+      </view>
+
+      <view class="form-group">
+        <view class="form-item">
+          <text class="label">名称 *</text>
+          <input v-model="createForm.name" class="input" placeholder="如：火花塞" placeholder-class="placeholder" />
+        </view>
+
+        <view class="form-row">
+          <view class="form-item">
+            <text class="label">单位</text>
+            <input v-model="createForm.unit" class="input" placeholder="个 / 套 / 米" placeholder-class="placeholder" />
+          </view>
+          <view class="form-item">
+            <text class="label">预警库存</text>
+            <input v-model="createForm.warning_stock" class="input" type="digit" placeholder="低于提示补货，默认10" placeholder-class="placeholder" />
+          </view>
+        </view>
+
+        <view class="form-item">
+          <text class="label">大类 *</text>
+          <view class="chip-wrap">
+            <view
+              v-for="c in categoryOptions"
+              :key="c"
+              class="chip"
+              :class="{ active: !customCategory && createForm.category === c }"
+              @click="selectCreateCategory(c)"
+            >{{ c }}</view>
+            <view class="chip" :class="{ active: customCategory }" @click="selectCustomCategory">其他（手填）</view>
+          </view>
+          <input
+            v-if="customCategory"
+            v-model="createForm.category"
+            class="input custom-cat"
+            placeholder="请输入大类名称，如：配件 / 成品"
+            placeholder-class="placeholder"
+          />
+        </view>
+
+        <view class="form-item">
+          <text class="label">规格型号（选填）</text>
+          <input v-model="createForm.spec" class="input" placeholder="如：M14×1.25 或 型号 A001" placeholder-class="placeholder" />
+          <view v-if="specOptions.length" class="chip-wrap spec-chips">
+            <view
+              v-for="s in specOptions"
+              :key="s"
+              class="chip small"
+              :class="{ active: createForm.spec === s }"
+              @click="createForm.spec = s"
+            >{{ s }}</view>
+          </view>
+        </view>
+
+        <view class="form-item">
+          <text class="label">细分类（选填）</text>
+          <view v-if="subCategoryOptions.length" class="chip-wrap">
+            <view
+              v-for="s in subCategoryOptions"
+              :key="s"
+              class="chip"
+              :class="{ active: createForm.sub_category === s }"
+              @click="createForm.sub_category = createForm.sub_category === s ? '' : s"
+            >{{ s }}</view>
+          </view>
+          <input
+            v-if="!subCategoryOptions.length || !subCategoryOptions.includes(createForm.sub_category)"
+            v-model="createForm.sub_category"
+            class="input"
+            :placeholder="subCategoryOptions.length ? '不在上面？手填细分类' : '如某车间 / 编号类目'"
+            placeholder-class="placeholder"
+          />
+        </view>
+
+        <view class="form-item">
+          <text class="label">物料编号（选填）</text>
+          <input v-model="createForm.material_no" class="input" placeholder="如 A001-1" placeholder-class="placeholder" />
+        </view>
+
+        <view class="form-item">
+          <text class="label">物料照片（选填）</text>
+          <view class="upload-box" @click="chooseCreatePhoto">
+            <text v-if="createUploading">上传中...</text>
+            <text v-else-if="createForm.image_fileid">已上传，点击可重传</text>
+            <text v-else>＋ 拍照/从相册上传</text>
+          </view>
+          <image
+            v-if="createForm.image_fileid"
+            class="create-photo-preview"
+            :src="fullFileUrl(createForm.image_fileid)"
+            mode="aspectFit"
+            @click="previewCreatePhoto"
+          />
+        </view>
+      </view>
+
+      <button class="btn-submit" :disabled="!canCreate" @click="onCreateSubmit">
+        {{ creating ? '创建中...' : '创建并入库' }}
+      </button>
+    </view>
+
+    <!-- 供应商选择弹窗（可搜索 + 可手输兜底；关不掉的口子都留了 ✕ 与点空白关闭） -->
+    <view v-if="showSupplierModal" class="supplier-mask" @click="showSupplierModal = false">
+      <view class="supplier-panel" @click.stop>
+        <view class="panel-head">
+          <view class="panel-grabber"></view>
+          <view class="panel-close" @click.stop="showSupplierModal = false">
+            <text>✕</text>
+          </view>
+        </view>
+        <view class="selected-info">
+          <text class="selected-name">选择供应商</text>
+          <text class="selected-stock">选中后仍可在输入框里改</text>
+        </view>
+        <view class="form-item">
+          <input
+            v-model="supplierKeyword"
+            class="input"
+            placeholder="搜索供应商名称 / 联系人"
+            placeholder-class="placeholder"
+            @input="onSupplierSearch"
+          />
+        </view>
+        <scroll-view class="supplier-list" scroll-y>
+          <view
+            v-for="s in supplierList"
+            :key="s._id"
+            class="supplier-row"
+            :class="{ active: supplier === s.name }"
+            @click="selectSupplier(s)"
+          >
+            <text class="supplier-name">{{ s.name }}</text>
+            <text class="supplier-sub">{{ s.contact || '—' }} · {{ s.phone || '—' }}</text>
+          </view>
+          <view v-if="!supplierLoading && supplierList.length === 0" class="supplier-empty">
+            <text>没有匹配的供应商，可直接在上方输入框手输</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { inboundApi, materialApi, warehouseApi } from '@/utils/api'
+import { inboundApi, materialApi, warehouseApi, supplierApi } from '@/utils/api'
+import { debounce } from '@/utils/debounce'
+import { uploadFile, fullFileUrl } from '@/utils/cloud'
 
 // 数据
 const keyword = ref('')
@@ -218,6 +405,58 @@ function onSearch() {
   page.value = 1
   noMore.value = false
   loadMaterials()
+}
+
+// 搜索框输入防抖（统一走 utils/debounce）：近 2000 条物料下逐字请求会卡
+const onSearchInput = debounce(onSearch, 300)
+
+/* ---------- 供应商：从档案选择 + 记住上次用过的（2026-10-09 新增） ---------- */
+const showSupplierModal = ref(false)
+const supplierKeyword = ref('')
+const supplierList = ref([])
+const supplierLoading = ref(false)
+const RECENT_KEY = 'last_suppliers'
+
+// 最近用过的供应商（本机记住，避免每次重新输入造成同一家写法不一致）
+const recentSuppliers = ref(uni.getStorageSync(RECENT_KEY) || [])
+
+const onSupplierSearch = debounce(loadSuppliers, 300)
+
+async function loadSuppliers() {
+  supplierLoading.value = true
+  try {
+    const res = await supplierApi.list({
+      keyword: supplierKeyword.value || undefined,
+      page: 1,
+      pageSize: 50
+    })
+    supplierList.value = res.list || []
+  } catch (err) {
+    supplierList.value = []
+    uni.showToast({ title: err.message || '供应商加载失败', icon: 'none' })
+  } finally {
+    supplierLoading.value = false
+  }
+}
+
+function openSupplierModal() {
+  showSupplierModal.value = true
+  supplierKeyword.value = ''
+  loadSuppliers()
+}
+
+function selectSupplier(s) {
+  supplier.value = s.name
+  rememberSupplier(s.name)
+  showSupplierModal.value = false
+}
+
+/** 记住最近用过的供应商（最多 5 个，最近优先） */
+function rememberSupplier(name) {
+  if (!name) return
+  const list = [name, ...(recentSuppliers.value || []).filter((x) => x !== name)].slice(0, 5)
+  recentSuppliers.value = list
+  uni.setStorageSync(RECENT_KEY, list)
 }
 
 /** 读取仓库列表（只有一个仓库时切换条自动隐藏） */
@@ -311,6 +550,144 @@ function onScan() {
   })
 }
 
+// 找不到物料时就地建档：不跳页，面板里建完自动选中，接着填数量单价入库
+const showCreate = ref(false)
+const creating = ref(false)
+const customCategory = ref(false)
+const createForm = ref({ name: '', unit: '个', warning_stock: '', category: '', sub_category: '', spec: '', material_no: '', image_fileid: '' })
+const existingAll = ref([]) // 本仓已有物料（生成大类/规格候选）
+
+const categoryOptions = computed(() => {
+  const set = new Set(existingAll.value.map((m) => m.category).filter(Boolean))
+  return set.size ? [...set] : ['配件', '成品']
+})
+
+/** 规格候选：限当前大类，避免把别类的规格选过来 */
+const specOptions = computed(() => {
+  const list = existingAll.value
+    .filter((m) => !createForm.value.category || m.category === createForm.value.category)
+    .map((m) => m.spec)
+    .filter(Boolean)
+  return [...new Set(list)].slice(0, 40)
+})
+
+/** 细分类候选：限当前大类下已有的（选完大类直接点，没有再手填） */
+const subCategoryOptions = computed(() => {
+  const list = existingAll.value
+    .filter((m) => createForm.value.category && m.category === createForm.value.category)
+    .map((m) => m.sub_category)
+    .filter(Boolean)
+  return [...new Set(list)].slice(0, 40)
+})
+
+const canCreate = computed(() =>
+  !!createForm.value.name.trim() && !!createForm.value.category.trim() && !!warehouseId.value && !creating.value
+)
+
+function selectCreateCategory(c) {
+  customCategory.value = false
+  createForm.value.category = c
+  // 换大类后清掉不属于它的细分类
+  if (!subCategoryOptions.value.includes(createForm.value.sub_category)) {
+    createForm.value.sub_category = ''
+  }
+}
+function selectCustomCategory() {
+  customCategory.value = true
+  createForm.value.category = ''
+}
+
+async function openCreate() {
+  // 搜索关键词直接当默认名称，少打一遍字
+  createForm.value = {
+    name: keyword.value.trim(), unit: '个', warning_stock: '',
+    category: '', sub_category: '', spec: '', material_no: '', image_fileid: ''
+  }
+  customCategory.value = false
+  closePanel()
+  showCreate.value = true
+  try {
+    const res = await materialApi.list({ warehouse_id: warehouseId.value || undefined, page: 1, pageSize: 500 })
+    existingAll.value = res.list || []
+  } catch (err) {
+    existingAll.value = []
+  }
+}
+
+function closeCreate() {
+  showCreate.value = false
+}
+
+/** 建档照片上传/预览 */
+const createUploading = ref(false)
+function chooseCreatePhoto() {
+  uni.chooseImage({
+    count: 1,
+    success: async (res) => {
+      const filePath = res.tempFilePaths && res.tempFilePaths[0]
+      if (!filePath) return
+      createUploading.value = true
+      try {
+        createForm.value.image_fileid = await uploadFile(filePath, 'materials')
+      } catch (err) {
+        uni.showToast({ title: err.message || '上传失败', icon: 'none' })
+      } finally {
+        createUploading.value = false
+      }
+    }
+  })
+}
+function previewCreatePhoto() {
+  uni.previewImage({ urls: [fullFileUrl(createForm.value.image_fileid)] })
+}
+
+async function onCreateSubmit() {
+  if (!canCreate.value) return
+  creating.value = true
+  uni.showLoading({ title: '创建中...', mask: true })
+  try {
+    const payload = {
+      name: createForm.value.name.trim(),
+      spec: createForm.value.spec.trim(),
+      category: createForm.value.category.trim(),
+      sub_category: createForm.value.sub_category.trim(),
+      unit: createForm.value.unit.trim() || '个',
+      warehouse_id: warehouseId.value,
+      material_no: createForm.value.material_no.trim(),
+      image_fileid: createForm.value.image_fileid || ''
+    }
+    // 预警库存留空用后端默认值（10），不要传空串把它变成 0
+    const ws = String(createForm.value.warning_stock || '').trim()
+    if (ws) payload.warning_stock = ws
+
+    const res = await materialApi.upsert(payload)
+    uni.hideLoading()
+    uni.vibrateShort()
+    uni.showToast({ title: `「${payload.name}」已建档`, icon: 'none' })
+    showCreate.value = false
+
+    // 刷新列表并自动选中新物料，直接接着入库
+    keyword.value = payload.name
+    page.value = 1
+    noMore.value = false
+    await loadMaterials()
+    const created = materialList.value.find((m) => String(m._id) === String(res._id))
+      || materialList.value[0]
+    if (created) onSelectMaterial(created)
+  } catch (err) {
+    uni.hideLoading()
+    uni.showToast({ title: err.message || '创建失败', icon: 'none', duration: 3000 })
+  } finally {
+    creating.value = false
+  }
+}
+
+// 看物料大图：入库登记时要对着实物核一遍，避免入库入错型号
+function previewMaterial(item) {
+  if (!item || !item.image_fileid) return
+  uni.previewImage({ urls: [fullFileUrl(item.image_fileid)] })
+}
+
 // 选择物料：再点一次同一物料 = 收起面板（避免"只进不出"）
 function onSelectMaterial(item) {
   if (selectedMaterial.value && String(selectedMaterial.value._id) === String(item._id)) {
@@ -383,6 +760,9 @@ async function onSubmit() {
 
     uni.hideLoading()
     uni.vibrateShort()
+
+    // 记住这次用的供应商，下次可直接点选（同供应商写法保持一致，方便对账）
+    if (String(supplier.value || '').trim()) rememberSupplier(String(supplier.value).trim())
 
     uni.showToast({
       // 重复提交（上一次其实已成功）时说明是同一张单，避免用户以为入了两次
@@ -524,6 +904,22 @@ onMounted(async () => {
     justify-content: center;
     font-size: 36rpx;
   }
+
+  .add-material-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 22rpx;
+    height: 60rpx;
+    background: #efeaf7;
+    border-radius: 30rpx;
+    flex-shrink: 0;
+
+    text {
+      font-size: 24rpx;
+      color: #6b5b95;
+    }
+  }
 }
 
 .material-list {
@@ -549,6 +945,27 @@ onMounted(async () => {
   padding: 30rpx;
   margin-bottom: 20rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+
+  /* 物料照片缩略图：有图/无图都占同样大小，列表高度才稳定 */
+  .material-thumb {
+    width: 96rpx;
+    height: 96rpx;
+    border-radius: 12rpx;
+    margin-right: 20rpx;
+    flex-shrink: 0;
+    background: #f2f3f5;
+  }
+
+  .material-thumb-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    text {
+      font-size: 20rpx;
+      color: #c0c4cc;
+    }
+  }
 
   .material-info {
     flex: 1;
@@ -604,6 +1021,51 @@ onMounted(async () => {
     display: block;
     margin-bottom: 20rpx;
   }
+
+  .empty-create {
+    display: inline-block;
+    margin-top: 20rpx;
+    padding: 14rpx 36rpx;
+    background: #0B4F95;
+    color: #fff;
+    font-size: 26rpx;
+    border-radius: 30rpx;
+  }
+}
+
+/* 建档面板里的 chips（大类/规格候选） */
+.chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+  margin-bottom: 14rpx;
+
+  .chip {
+    padding: 10rpx 24rpx;
+    font-size: 24rpx;
+    color: #666;
+    background: #f0f0f0;
+    border-radius: 26rpx;
+
+    &.active {
+      background: #0B4F95;
+      color: #fff;
+    }
+
+    &.small {
+      padding: 6rpx 18rpx;
+      font-size: 22rpx;
+    }
+  }
+}
+
+.custom-cat {
+  margin-top: 6rpx;
+}
+
+.spec-chips {
+  margin-top: 14rpx;
+  margin-bottom: 0;
 }
 
 .submit-panel {
@@ -744,6 +1206,117 @@ onMounted(async () => {
 
     &::after {
       border: none;
+    }
+  }
+}
+
+.upload-box {
+  font-size: 26rpx;
+  color: #0B4F95;
+  background: #e8f1fb;
+  border-radius: 10rpx;
+  padding: 24rpx;
+  text-align: center;
+}
+
+.create-photo-preview {
+  width: 100%;
+  height: 280rpx;
+  margin-top: 14rpx;
+  border-radius: 10rpx;
+  background: #f5f5f5;
+}
+
+/* ---------- 供应商：从档案选择（2026-10-09 新增） ---------- */
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+
+  .label {
+    margin-bottom: 0;
+  }
+
+  .pick-link {
+    font-size: 24rpx;
+    color: #0B4F95;
+  }
+}
+
+.recent-suppliers {
+  margin-top: 12rpx;
+}
+
+.supplier-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+}
+
+.supplier-panel {
+  width: 100%;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 10rpx 30rpx 40rpx;
+  max-height: 82vh;
+  overflow-y: auto;
+
+  .form-item {
+    margin: 18rpx 0;
+
+    .input {
+      background: #f5f5f5;
+      border-radius: 12rpx;
+      height: 88rpx;
+      line-height: 88rpx;
+      padding: 0 24rpx;
+      font-size: 30rpx;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .placeholder {
+      color: #999;
+    }
+  }
+
+  .supplier-list {
+    max-height: 52vh;
+
+    .supplier-row {
+      padding: 24rpx 20rpx;
+      border-bottom: 1rpx solid #f0f0f0;
+
+      &.active {
+        background: #eef5ff;
+      }
+
+      .supplier-name {
+        display: block;
+        font-size: 30rpx;
+        color: #333;
+      }
+
+      .supplier-sub {
+        display: block;
+        font-size: 24rpx;
+        color: #999;
+        margin-top: 6rpx;
+      }
+    }
+
+    .supplier-empty {
+      padding: 40rpx 0;
+      text-align: center;
+      font-size: 26rpx;
+      color: #999;
     }
   }
 }

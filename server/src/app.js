@@ -22,6 +22,7 @@ const {
 const {
   canAccessWarehouse, requireWarehouseAccess, visibleWarehouseIds, warehouseScope
 } = require('./services/warehouse')
+const { auditDenied } = require('./services/audit')
 const { ping } = require('./db/pool')
 
 // ---------- 业务模块 ----------
@@ -36,7 +37,8 @@ const modules = [
   require('./modules/supplier'),
   require('./modules/warehouse'),
   require('./modules/upload'),
-  require('./modules/message')
+  require('./modules/message'),
+  require('./modules/purchase')
 ]
 
 const app = express()
@@ -90,9 +92,26 @@ app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }))
 // 目录不存在时不启用（本地开发后台走 vite 5173，不受影响）
 const ADMIN_DIR = process.env.ADMIN_DIR || path.join(__dirname, '../../admin/dist')
 if (require('fs').existsSync(ADMIN_DIR)) {
-  app.use('/admin', express.static(ADMIN_DIR, { maxAge: '1d' }))
+  const NO_CACHE = 'no-store, no-cache, must-revalidate, max-age=0'
+  // 带内容指纹（hash 文件名）的资源可以放心长缓存；
+  // 但 index.html 绝不能缓存：它里面写着当前版本的 JS 文件名，
+  // 一旦被浏览器缓存住，发版后用户还在用旧 index.html，引到已被删掉的旧 hash 文件，
+  // 加上下面的 SPA 兜底又会把 HTML 当 JS 回给浏览器 → 页面直接白屏。
+  app.use('/admin', express.static(ADMIN_DIR, {
+    maxAge: '1d',
+    setHeaders (res, filePath) {
+      if (path.basename(filePath) === 'index.html') res.setHeader('Cache-Control', NO_CACHE)
+    }
+  }))
   // history 模式 SPA 兜底：/admin/ 下的前端路由都回 index.html
-  app.get('/admin/*', (req, res) => res.sendFile(path.join(ADMIN_DIR, 'index.html')))
+  // 但「要的是静态资源」的请求不能兜底成 HTML —— 那样浏览器拿到 text/html 当 JS 解析，
+  // 只会报一句看不懂的 MIME 错误。这里明确回 404，方便一眼看出是资源缺失。
+  const ASSET_EXT = /\.(js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|json|txt)$/i
+  app.get('/admin/*', (req, res, next) => {
+    if (ASSET_EXT.test(req.path)) return next()
+    res.setHeader('Cache-Control', NO_CACHE)
+    res.sendFile(path.join(ADMIN_DIR, 'index.html'))
+  })
 }
 
 // ---------- 业务模块统一分发 ----------
@@ -100,6 +119,9 @@ for (const mod of modules) {
   app.post(`/api/${mod.name}`, async (req, res) => {
     const body = req.body || {}
     const { action, data = {}, client_request_id } = body
+    // ctx 必须在 try 外声明：catch 里的越权留痕（auditDenied）也要用它，
+    // 否则 BizError 401/403 一进 catch 就 ReferenceError 把整个进程搞挂（V4 测试 P0）
+    let ctx = null
 
     try {
       if (!action) {
@@ -114,7 +136,7 @@ for (const mod of modules) {
       const isPublic = (mod.publicActions || []).includes(action)
 
       // ---- 构造上下文 ----
-      const ctx = {
+      ctx = {
         module: mod.name,
         action,
         clientRequestId: client_request_id || '',
@@ -147,13 +169,13 @@ for (const mod of modules) {
           // 提示语区分「压根没登录」和「登录态过期」：
           // 原来一律说"登录已过期，请重新登录"，从没登录过的人看了莫名其妙
           // （来自 4 角色使用者测试 P2-未登录提示）。
-          return res.json(
-            token
-              ? fail(401, '登录已过期，请重新登录')
-              : fail(401, '请先登录')
-          )
+          const msg = token ? '登录已过期，请重新登录' : '请先登录'
+          // 留痕：伪造 token / 过期 token 反复打接口是异常信号，必须能事后发现
+          auditDenied({ ctx, moduleName: mod.name, action, code: 401, reason: msg })
+          return res.json(fail(401, msg))
         }
         if (ctx.user.status === 'disabled') {
+          auditDenied({ ctx, moduleName: mod.name, action, code: 403, reason: '账号已被禁用' })
           return res.json(fail(403, '账号已被禁用，请联系管理员'))
         }
       }
@@ -161,6 +183,11 @@ for (const mod of modules) {
       // ---- 角色权限校验 ----
       const needRoles = mod.roleRules && mod.roleRules[action]
       if (needRoles && !hasAnyRole(ctx.user, needRoles)) {
+        // 「有人在试越权」是安全事件的第一手线索，必须留痕（V3 测试 P1-8）
+        auditDenied({
+          ctx, moduleName: mod.name, action, code: 403,
+          reason: `角色不足（该操作需要：${needRoles.join('/')}）`
+        })
         return res.json(fail(403, '无操作权限'))
       }
 
@@ -181,12 +208,24 @@ for (const mod of modules) {
 
       // handler 统一返回 { code, data, message }
       if (result && typeof result === 'object' && 'code' in result) {
+        // 业务层自己判出来的 401/403 同样要留痕
+        // （例如「只有管理员才能授予管理员」「无权操作该仓库」这类）
+        if (result.code === 401 || result.code === 403) {
+          auditDenied({
+            ctx, moduleName: mod.name, action, code: result.code,
+            reason: result.message
+          })
+        }
         return res.json(result)
       }
       // 容错：handler 直接返回数据时自动包装
       return res.json({ code: 0, data: result === undefined ? null : result, message: '操作成功' })
     } catch (err) {
       if (err instanceof BizError) {
+        // 抛出来的 403（如 ctx.requireWarehouseAccess 跨仓拦截）也要留痕
+        if (err.code === 401 || err.code === 403) {
+          auditDenied({ ctx: ctx || {}, moduleName: mod.name, action, code: err.code, reason: err.message })
+        }
         return res.json(fail(err.code, err.message))
       }
 

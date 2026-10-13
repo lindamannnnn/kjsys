@@ -13,6 +13,8 @@ const STATUS_TEXT = {
   pending: '待确认',
   pending_review: '待审核',
   in_progress: '盘点中',
+  picking: '待拣货',
+  receiving: '待收货',
   confirmed: '已确认',
   completed: '已完成',
   cancelled: '已作废',

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6 岗位 Agent 真实使用感受 · 胜龙进销存</title>
+<style>
+  :root{
+    --bg:#070c16; --bg2:#0b1424; --panel:rgba(18,30,50,.72); --line:rgba(90,140,200,.18);
+    --txt:#e8f0fb; --txt2:#9fb3cc; --txt3:#6b819c;
+    --cyan:#2fd6e8; --blue:#3d8bfd; --green:#37d39b; --amber:#ffb020; --red:#ff5c5c; --purple:#a07bff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.75; padding:0 0 80px;
+    background-image:
+      radial-gradient(900px 500px at 12% -8%, rgba(61,139,253,.20), transparent 60%),
+      radial-gradient(800px 460px at 88% 4%, rgba(47,214,232,.14), transparent 62%),
+      radial-gradient(700px 400px at 50% 100%, rgba(160,123,255,.10), transparent 65%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  header{padding:56px 0 30px;border-bottom:1px solid var(--line);margin-bottom:34px}
+  .kicker{font-size:12px;letter-spacing:.34em;color:var(--cyan);text-transform:uppercase;margin-bottom:14px}
+  h1{font-size:34px;letter-spacing:.02em;font-weight:700;
+     background:linear-gradient(92deg,#eaf6ff,#7fd8ff 48%,#4aa8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--txt2);font-size:14px;margin-top:14px;max-width:860px}
+  .meta{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
+  .chip{font-size:12px;padding:4px 12px;border-radius:999px;border:1px solid var(--line);color:var(--txt2);background:rgba(255,255,255,.03)}
+  h2{font-size:21px;margin:44px 0 16px;padding-left:14px;border-left:3px solid var(--blue)}
+  h3{font-size:16px;margin:26px 0 10px;color:#cfe4ff}
+  p{color:var(--txt2);font-size:14.5px;margin:10px 0}
+  .concl{background:linear-gradient(135deg,rgba(47,214,232,.10),rgba(61,139,253,.06));
+         border:1px solid rgba(47,214,232,.28);border-radius:14px;padding:20px 22px;margin:22px 0}
+  .concl b{color:#8ff0ff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;
+        backdrop-filter:blur(8px);position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--c,var(--blue)),transparent);opacity:.9}
+  .card h4{font-size:15px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .card .role{font-size:11px;font-family:var(--mono);color:var(--txt3);
+              border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+  .card .feel{font-size:13.5px;color:var(--txt2);margin-top:8px}
+  .card .feel b{color:#fff}
+  .cnt{position:absolute;right:16px;top:14px;font-family:var(--mono);font-size:22px;color:rgba(255,255,255,.14)}
+  .bar{height:4px;border-radius:2px;background:rgba(255,255,255,.08);margin-top:12px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:2px;background:var(--c,var(--blue))}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--txt3);font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+  td{color:var(--txt2)}
+  code{font-family:var(--mono);font-size:12.5px;color:#9fe3ff;background:rgba(47,214,232,.08);
+       border:1px solid rgba(47,214,232,.16);border-radius:5px;padding:1px 6px}
+  .ev{font-size:12.5px;color:var(--txt3);font-family:var(--mono);word-break:break-all}
+  ul{padding-left:20px;color:var(--txt2);font-size:14px}
+  li{margin:6px 0}
+  li::marker{color:var(--cyan)}
+  .ok{background:rgba(55,211,155,.14);color:#6fe6b8;border:1px solid rgba(55,211,155,.36);
+      border-radius:6px;padding:2px 8px;font-size:11px;font-family:var(--mono)}
+  .warnbox{background:rgba(255,176,32,.07);border:1px solid rgba(255,176,32,.28);border-radius:12px;padding:16px 18px;margin:18px 0;font-size:13.5px;color:#ffd79a}
+  .good{background:rgba(55,211,155,.06);border:1px solid rgba(55,211,155,.24);border-radius:12px;padding:16px 18px;margin:16px 0;font-size:13.5px;color:#a8f0d0}
+  .foot{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);color:var(--txt3);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">ShengLong ERP · Agent Re-Test</div>
+  <h1>6 岗位 Agent 真实使用感受</h1>
+  <p class="sub">让 6 个岗位「以真实使用者身份」各跑 3 轮完整业务闭环（783 条断言），
+     再用真实浏览器做 23 条体感复验，专查「点了到底有没有反应」。本文讲的是<b>用起来的感受</b>，不是接口流水。</p>
+  <div class="meta">
+    <span class="chip">2026-10-09 复测</span>
+    <span class="chip">783 / 783 断言</span>
+    <span class="chip">体感复验 23 / 23</span>
+    <span class="chip" style="border-color:rgba(55,211,155,.4);color:#6fe6b8">P0 0 ｜ P1 0 ｜ P2 0</span>
+  </div>
+</header>
+
+<div class="concl">
+  <b>一句话结论：</b>系统现在是「稳」的 —— <b>不该让你干的事，它真的拦得住；你犯的错，它接得住。</b><br>
+  783 条断言零失败、23 条体感复验零失败。上一轮被吐槽的「假按钮、点了没反应」，这轮<b>全部变成真的了</b>。
+</div>
+
+<div class="warnbox">
+  <b>还有一处结构性别扭没解决：提醒到不了人。</b><br>
+  底部导航只有「首页 / 我的」，消息入口藏在首页底部；登录后又会自动跳工作台 →
+  被驳回 / 待收货 / 待审核很容易漏。按你的决定，这条<b>后续接企业微信</b>，本轮小程序端未动。
+</div>
+
+<h2>一、六个岗位的真实感受</h2>
+<p>按「活有多重」排序（断言数 = 这个岗位在一轮里被验证了多少件事）。</p>
+
+<div class="grid">
+  <div class="card" style="--c:#37d39b"><span class="cnt">231</span>
+    <h4>仓管 <span class="role">storekeeper</span></h4>
+    <div class="feel"><b>全系统的枢纽，也是最累的一个。</b>入库、出库、盘点、采购四条线都要碰，
+    231 条断言比采购员多近 3 倍。好在<b>拦得住</b>：单价 0 / 负数被明确拒绝，
+    <b>待审盘点单想再改数也会被拒</b>（防偷改）。会手抖的地方：重复拣货 —— 系统返回幂等提示，不重复扣库存。</div>
+    <div class="bar"><i style="width:100%"></i></div>
+  </div>
+
+  <div class="card" style="--c:#ff5c5c"><span class="cnt">141</span>
+    <h4>老板 <span class="role">boss</span></h4>
+    <div class="feel"><b>什么都看得到，但什么都干不了</b>（这是设计）。141 条里一大半是「我想干但被拒绝」。
+    最让人放心的是：被拒之后<b>库存确实没变</b> —— 不是「提示失败但其实改了」的假拒绝。
+    待审通知也不再发给老板了，收件箱干净了。</div>
+    <div class="bar"><i style="width:61%"></i></div>
+  </div>
+
+  <div class="card" style="--c:#2fd6e8"><span class="cnt">138</span>
+    <h4>领料员 <span class="role">out</span></h4>
+    <div class="feel"><b>撤销规则很清楚</b>：待确认可撤、待拣货可撤、待收货不可撤；
+    <b>2 小时前的老单照样能撤</b>（不限时，很人性化）。跨仓拿料直接拒。
+    ⚠️ 唯一别扭：<b>超额领料提交时不拦</b>（看不见库存），等仓管确认时才拒 —— 反馈是延迟的。</div>
+    <div class="bar"><i style="width:60%"></i></div>
+  </div>
+
+  <div class="card" style="--c:#a07bff"><span class="cnt">129</span>
+    <h4>管理员 <span class="role">admin</span></h4>
+    <div class="feel"><b>唯一管理员不可被降级</b> —— 否则系统会变成「没人能管」，这是 P0 级保险。
+    盘点审核在老板那里被拒的那条，<b>到这里能过</b>（正例）。
+    老板看板与后台看板数字一致、预警四个口径一致，两端对得上，数字才敢信。</div>
+    <div class="bar"><i style="width:56%"></i></div>
+  </div>
+
+  <div class="card" style="--c:#ffb020"><span class="cnt">81</span>
+    <h4>采购员 <span class="role">purchase</span></h4>
+    <div class="feel"><b>流程最短、最轻松</b>，81 条断言只有仓管的三分之一。
+    领任务 → 录单价/备注 → 完事。<b>重复领取任务是「幂等提示」不是报错</b>
+    （还是自己的任务、不会易主）—— 这个设计对。</div>
+    <div class="bar"><i style="width:35%"></i></div>
+  </div>
+
+  <div class="card" style="--c:#3d8bfd"><span class="cnt">54</span>
+    <h4>厂长 <span class="role">director</span></h4>
+    <div class="feel"><b>边界最清楚的一个岗位。</b>该干的都通（盘点、发采购单、看两仓库存含金额）；
+    不该干的全被拒（入库、驳回出库、删物料、建用户、看趋势，5 条越权全拦）。
+    最关键：<b>能点开别人（仓管）建的盘点单</b> —— 审核入口才真的可达。</div>
+    <div class="bar"><i style="width:23%"></i></div>
+  </div>
+</div>
+
+<p style="font-size:13px;color:var(--txt3)">附：匿名访客 9 条 —— 未登录 401、伪造 token 401、乱写模块名被拒。<b>门是关着的。</b></p>
+
+<h2>二、人真的会犯的错，系统接得住吗</h2>
+<p>误操作包专门模拟「手滑」，这是最能体现好不好用的部分。</p>
+<table>
+<thead><tr><th style="width:240px">我会犯的错</th><th>系统的反应</th><th style="width:110px">感受</th></tr></thead>
+<tbody>
+<tr><td>网络卡了<b>连点两下提交</b></td><td>只落<b>一张单</b>，第二次返回「已提交过」</td><td><span class="ok">👍 最怕的重复单没发生</span></td></tr>
+<tr><td>数量填 0 / -1 / 1.5 / 文字</td><td>全部明确拒绝</td><td><span class="ok">👍 说得清</span></td></tr>
+<tr><td>查<b>不存在</b>的物料</td><td>明确 404</td><td><span class="ok">👍 不是静默</span></td></tr>
+<tr><td>报废单<b>忘传照片 / 忘写备注</b></td><td>被拒</td><td>⚠️ 业务规则，容易漏（但有提示）</td></tr>
+<tr><td><b>改价填 0</b></td><td>被拒</td><td><span class="ok">👍 成本不会失真</span></td></tr>
+<tr><td><b>档案里直接改库存</b></td><td>被拒（P0）</td><td><span class="ok">👍 口子必须封死</span></td></tr>
+<tr><td><b>超额领料</b></td><td>提交时不拦，仓管确认时才拒</td><td>⚠️ 反馈延迟</td></tr>
+<tr><td>重复收货 / 重复拣货 / 重复领取</td><td>幂等提示，不重复扣</td><td><span class="ok">👍 手抖安全</span></td></tr>
+</tbody>
+</table>
+
+<h2>三、上一轮修的东西，现在真的好用了吗</h2>
+<p>这是本轮新增的<b>体感复验</b>（真实浏览器，23 条全绿）。上一轮吐槽最多的是「点了没反应」，逐条复验：</p>
+
+<h3>✅ 看板「今天 / 本周 / 本月」—— 真的会重新取数了</h3>
+<table>
+<thead><tr><th>验证</th><th style="width:90px">结果</th></tr></thead>
+<tbody>
+<tr><td>点「本周」真的重新发了请求</td><td><span class="ok">✅</span></td></tr>
+<tr><td>请求<b>真的带 <code>period=week</code></b>、本月带 <code>month</code>、今天带 <code>today</code></td><td><span class="ok">✅ 三个都对</span></td></tr>
+<tr><td>切完 <b>KPI 标题跟着变</b>（显示「本周出库单数」，而不只是数字变）</td><td><span class="ok">✅</span></td></tr>
+</tbody>
+</table>
+<div class="good"><b>感受：</b>以前点这三个 tab，数字纹丝不动（前端只改了个变量）。
+现在每点一次就发一次带周期的请求，连标题都跟着改。这条修得很彻底。</div>
+
+<h3>✅ 预警页「通知采购」—— 不再是假按钮</h3>
+<table>
+<thead><tr><th>验证</th><th style="width:90px">结果</th></tr></thead>
+<tbody>
+<tr><td>点下去<b>真的调了 <code>notifyWarning</code> 接口</b></td><td><span class="ok">✅</span></td></tr>
+<tr><td>通知<b>带上具体物料</b>（不是整批乱发）</td><td><span class="ok">✅</span></td></tr>
+<tr><td><b>页面给了可见反馈</b>（弹 toast「已通知 N 人」）</td><td><span class="ok">✅</span></td></tr>
+</tbody>
+</table>
+<div class="good"><b>感受：</b>原来这个按钮只有一句 toast、零接口调用 ——
+<b>老板会真以为采购已经收到通知了</b>，漏补货是业务损失。现在通知真的落到采购员和仓管的收件箱里。</div>
+
+<h3>✅ 其余三处</h3>
+<ul>
+<li><b>搜索防抖</b>：连敲 6 个字只发 ≤3 次请求（近 2000 条物料下不会卡），且确实发起了搜索（不是没反应）。</li>
+<li><b>上拉加载</b>：实测造了 25 条任务（每页 20 条），滚到底 → <b>真的发出了 <code>page=2</code> 的请求</b>，任务行正常渲染。以前这些列表固定 50/100 条、翻不到也搜不到。</li>
+<li><b>「修改密码」入口</b>：存在、点得进、表单正常渲染。这条原来是 <b>P0</b> —— 后端有「首次登录强制改密」门禁，但小程序端没有改密页，<b>命中即锁死</b>。</li>
+</ul>
+
+<h2>四、还是会让人别扭的地方（诚实清单）</h2>
+<table>
+<thead><tr><th style="width:40px">#</th><th style="width:190px">问题</th><th>现状</th><th style="width:230px">建议</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><b>提醒还是到不了人</b></td>
+<td>底部导航只有「首页 / 我的」，消息入口藏在首页底部；登录后又会自动跳工作台 → 被驳回 / 待收货 / 待审核很容易漏</td>
+<td>按你的决定，<b>后续接企业微信</b>，在企微里提醒。本轮小程序端未动</td></tr>
+<tr><td>2</td><td><b>超额领料反馈延迟</b></td>
+<td>领料员看不见库存，提交时不拦，等仓管确认时才拒</td>
+<td>提交页加一句「数量较大，需仓管确认」的预期提示，降低「白干」感</td></tr>
+<tr><td>3</td><td><b>报废单要照片 + 备注</b></td>
+<td>缺任一项都拒，业务上必要，但领料员容易漏</td>
+<td>把两项校验前置到提交按钮上（现在是被拒后才说）</td></tr>
+<tr><td>4</td><td><b>真机体感未验</b></td>
+<td>本次浏览器层跑的是 H5，手感 / 滚动流畅度没测</td>
+<td>出体验版后在真机走一遍</td></tr>
+</tbody>
+</table>
+
+<h2>五、数据附录</h2>
+<table>
+<thead><tr><th>指标</th><th>数值</th></tr></thead>
+<tbody>
+<tr><td>轮次 × 岗位</td><td>3 轮 × 6 岗位（+ 匿名探针）</td></tr>
+<tr><td>断言总数</td><td><b>783 / 783 通过，0 失败</b></td></tr>
+<tr><td>P0 / P1 / P2</td><td><b>0 / 0 / 0</b></td></tr>
+<tr><td>每轮断言</td><td>261（3 轮完全一致，说明没有偶发）</td></tr>
+<tr><td>体感复验（真实浏览器）</td><td><b>23 / 23 通过</b></td></tr>
+<tr><td>库基线（跑完复查）</td><td>单据 0 · 消息 0 · 库存流水 1 条 · 物料 <b>1906</b> · 库存非 10 的物料 <b>0</b></td></tr>
+</tbody>
+</table>
+
+<h3>各岗位断言分布</h3>
+<table>
+<thead><tr><th>岗位</th><th style="width:110px">断言数</th><th style="width:110px">占全量</th></tr></thead>
+<tbody>
+<tr><td>仓管</td><td>231</td><td>29.5%</td></tr>
+<tr><td>老板</td><td>141</td><td>18.0%</td></tr>
+<tr><td>领料员</td><td>138</td><td>17.6%</td></tr>
+<tr><td>管理员</td><td>129</td><td>16.5%</td></tr>
+<tr><td>采购员</td><td>81</td><td>10.3%</td></tr>
+<tr><td>厂长</td><td>54</td><td>6.9%</td></tr>
+<tr><td>匿名</td><td>9</td><td>1.2%</td></tr>
+</tbody>
+</table>
+
+<h2>六、这次踩到的三个坑（都修了）</h2>
+<ul>
+<li><b>脚本崩溃污染了基线</b>：造测试数据的 <code>UPDATE</code> 写在 <code>try</code> 之前，下一句字段名写错崩了 →
+<code>finally</code> 没执行 → 一个真实物料被永久改成「库存 0 / 预警值 5」，还得翻备份表找回原值。
+<b>已修</b>：造数据的 SQL 一律放进 <code>try</code>；还原时 <code>current_stock</code> 和 <code>warning_stock</code> <b>都要</b>还原。</li>
+<li><b>toast 采样时机导致误判</b>：先 <code>sleep(2000)</code> 等请求再抓文案，而 toast 只显示 1.5 秒 → 采了个空，
+误判成「点了没反馈」。<b>已修</b>：改成边等边高频采样。</li>
+<li><b>判据用错了字段</b>：拿任务列表去匹配 <code>remark</code>，而列表卡片显示的是<b>任务号 + 状态</b>，根本不显示 remark → 恒假。
+<b>已修</b>：判据换成列表上真实可见的东西。</li>
+</ul>
+
+<div class="foot">
+取证方式：6 岗位 Agent 各跑 3 轮真实业务闭环（783 条断言）+ 真实浏览器 23 条体感复验。<br>
+口径说明：接口层是真实调用；浏览器层跑的是 H5 产物（只作交互逻辑证据），真机手感 / 滚动流畅度需补验，本报告不臆断。<br>
+胜龙进销存 ERP · G:/sl/shenglong-erp · 2026-10-09
+</div>
+
+</div>
+</body>
+</html>

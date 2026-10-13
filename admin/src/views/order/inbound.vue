@@ -34,6 +34,12 @@
           <el-button type="primary" @click="handleSearch">搜索</el-button>
           <el-button @click="resetSearch">重置</el-button>
           <el-button type="success" :loading="exporting" @click="handleExport">导出 CSV</el-button>
+          <!-- 新建入库单：仓管与管理员（对应小程序「入库登记」） -->
+          <el-button
+            v-if="canCreate"
+            type="warning"
+            @click="$router.push('/order/inbound-create')"
+          >新建入库单</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -51,7 +57,8 @@
             {{ totalQty(row) }}
           </template>
         </el-table-column>
-        <el-table-column prop="total_price" label="总金额" width="120">
+        <!-- 总金额：仓管端按仓库区分 —— 配件仓保留、成品仓不下发（后端 inbound.list 脱敏） -->
+        <el-table-column v-if="showAmount" prop="total_price" label="总金额" width="120">
           <template #default="{ row }">
             ¥{{ Number(row.total_price || 0).toFixed(2) }}
           </template>
@@ -79,7 +86,7 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button
-              v-if="row.status === 'pending'"
+              v-if="row.status === 'pending' && canConfirmRole"
               type="success"
               size="small"
               @click="handleConfirm(row)"
@@ -87,7 +94,7 @@
               确认
             </el-button>
             <el-button
-              v-if="row.status === 'pending' || row.status === 'confirmed'"
+              v-if="canCancelInbound(row)"
               type="warning"
               size="small"
               @click="handleCancel(row)"
@@ -119,7 +126,7 @@
         <el-descriptions-item label="仓库">{{ detail.warehouse_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="操作员">{{ detail.operator_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
-        <el-descriptions-item label="总金额">¥{{ Number(detail.total_price || 0).toFixed(2) }}</el-descriptions-item>
+        <el-descriptions-item v-if="showDetailAmount" label="总金额">¥{{ Number(detail.total_price || 0).toFixed(2) }}</el-descriptions-item>
         <el-descriptions-item label="确认人">{{ detail.confirm_operator_name || '-' }}</el-descriptions-item>
         <!-- 追责链要完整：不能缺作废人（王总 P2-3-06） -->
         <el-descriptions-item label="作废人">{{ detail.cancel_operator_name || '-' }}</el-descriptions-item>
@@ -133,12 +140,13 @@
         <el-table-column prop="material_spec" label="规格" width="110" />
         <el-table-column prop="quantity" label="数量" width="90" />
         <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column prop="unit_price" label="单价" width="100">
+        <!-- 单价 / 小计：同「总金额」，成品仓单据对仓管不下发 -->
+        <el-table-column v-if="showDetailAmount" prop="unit_price" label="单价" width="100">
           <template #default="{ row }">
             ¥{{ Number(row.unit_price || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="total_price" label="小计" width="110">
+        <el-table-column v-if="showDetailAmount" prop="total_price" label="小计" width="110">
           <template #default="{ row }">
             ¥{{ Number(row.total_price || 0).toFixed(2) }}
           </template>
@@ -147,17 +155,47 @@
 
       <template #footer v-if="detail.status === 'pending'">
         <el-button @click="detailVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleUpdatePrice">修改单价</el-button>
+        <!-- 修改单价 = inbound.updatePrice，只放行 仓管/管理员；
+             成品仓管看不到金额的单据也不给改价入口，避免「盲改」 -->
+        <el-button v-if="canConfirmRole && showDetailAmount" type="primary" @click="handleUpdatePrice">修改单价</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { inboundApi, warehouseApi, exportApi } from '@/api'
+import { useUserStore } from '@/store/user'
+import { canViewCost } from '@/constants/roles'
+
+const userStore = useUserStore()
+
+/* ---------- 按角色显隐操作按钮（后端 roleRules / 内部逻辑才是防线） ---------- */
+function has(...names) {
+  const roles = userStore.roles || []
+  return names.some((n) => roles.includes(n))
+}
+/** 与后端 middleware/auth.js 同口径：openid 优先，后台账号用 username */
+function myIdentity() {
+  const u = userStore.userInfo || {}
+  return u.openid || u.username || ''
+}
+// 确认入库 / 修改单价：仓管与管理员
+const canConfirmRole = computed(() => has('storekeeper', 'admin'))
+// 新建入库单：仓管与管理员（对应小程序「入库登记」入口）
+const canCreate = computed(() => has('storekeeper', 'admin'))
+
+/** 撤销：和后端 inbound.cancel 的分档一一对应 —— 本人可撤未确认的；已确认只有管理员能作废 */
+function canCancelInbound(row) {
+  const isAdmin = has('admin')
+  const isOwner = !!row.operator_openid && row.operator_openid === myIdentity()
+  if (row.status === 'pending') return isOwner || isAdmin
+  if (row.status === 'confirmed') return isAdmin
+  return false
+}
 
 const loading = ref(false)
 const exporting = ref(false)
@@ -178,6 +216,23 @@ const warehouses = ref([])
 
 const detailVisible = ref(false)
 const detail = ref({})
+
+/**
+ * 仓管是否属于「不看金额」的角色（与后端 isCostHiddenUser 同口径）。
+ * 用在导出：管理员等不受影响，仓管的金额列则跟随页面展示逻辑。
+ */
+const canSeeCost = computed(() => canViewCost(userStore.roles || []))
+
+/**
+ * 入库单金额是否展示（2026-10-10）：**按数据判断** ——
+ * 后端对仓管只脱敏**成品仓**单据的金额，配件仓单据金额保留（采购对账用），
+ * 所以配件仓管照常看到金额列，成品仓管整列无值 → 隐藏。
+ * ⚠️ 管理员/老板/厂长/采购不受影响（后端只对「纯仓管」脱敏）。
+ */
+const showAmount = computed(() => orderList.value.some((r) => r.total_price != null))
+
+/** 详情弹窗的金额单独判断：详情是哪张单，就按哪张单算 */
+const showDetailAmount = computed(() => detail.value.total_price != null)
 
 function statusText(status) {
   const map = {
@@ -313,8 +368,12 @@ async function handleExport() {
       },
       columns: [
         'order_no', 'supplier', 'warehouse_name', 'operator_name', 'status_text',
-        'material_name', 'material_spec', 'quantity', 'unit', 'unit_price', 'line_amount',
-        'total_price', 'created_at', 'confirm_operator_name', 'cancel_operator_name',
+        'material_name', 'material_spec', 'quantity', 'unit',
+        // 金额列跟随页面展示逻辑：成品仓管整列无值时一并去掉，免得导出空列
+        ...(canSeeCost.value || showAmount.value
+          ? ['unit_price', 'line_amount', 'total_price']
+          : []),
+        'created_at', 'confirm_operator_name', 'cancel_operator_name',
         'cancel_reason', 'remark'
       ]
     })

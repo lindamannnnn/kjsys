@@ -16,7 +16,10 @@
       <text class="progress-text">
         已录入 {{ enteredCount }} / {{ totalCount }} 项<text v-if="diffCount"> · 有差异 {{ diffCount }} 项</text>
       </text>
-      <text v-if="!readonly" class="quick-fill" @click="fillRestWithBook">其余按账面数填</text>
+      <view v-if="!readonly" class="quick-ops">
+        <text class="quick-fill" @click="fillRestWithBook">其余按账面数填</text>
+        <text v-if="enteredCount" class="quick-clear" @click="clearAll">清空重录</text>
+      </view>
     </view>
 
     <!-- 盘点物料列表 -->
@@ -68,7 +71,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { checkApi } from '@/utils/api'
 
 const check = ref({})
@@ -142,8 +146,27 @@ function onQuantityChange(index) {
   }
 }
 
-/** 把还没录的物料按账面数填入（实物与账面一致时最省事） */
-function fillRestWithBook() {
+/** 把还没录的物料按账面数填入（实物与账面一致时最省事）
+ *  ⚠️ 2026-10-09 加二次确认：整仓上千项，误点一次全部变成「无差异」，
+ *    原先没有确认也没有反向操作，只能逐项清 —— 用户反馈会误提交。 */
+async function fillRestWithBook() {
+  // 数一下会被填的项，用于确认文案（没有可填的就不用弹了）
+  const pending = check.value.items.filter((it) => !isEntered(it)).length
+  if (!pending) {
+    uni.showToast({ title: '所有物料都已录入', icon: 'none' })
+    return
+  }
+
+  const confirmed = await new Promise((resolve) => {
+    uni.showModal({
+      title: '按账面数填充',
+      content: `将把剩余 ${pending} 项全部填成账面数（视为无差异）。\n确认后可用「清空重录」撤销。`,
+      confirmText: '填充',
+      success: (res) => resolve(res.confirm)
+    })
+  })
+  if (!confirmed) return
+
   let filled = 0
   check.value.items.forEach((item, index) => {
     if (!isEntered(item)) {
@@ -152,11 +175,30 @@ function fillRestWithBook() {
       filled++
     }
   })
-  if (filled) {
-    uni.showToast({ title: `已按账面数填入 ${filled} 项`, icon: 'none' })
-  } else {
-    uni.showToast({ title: '所有物料都已录入', icon: 'none' })
-  }
+  uni.showToast({ title: `已按账面数填入 ${filled} 项`, icon: 'none' })
+}
+
+/** 清空已录入的实际数量（「其余按账面数填」点错后的反向操作） */
+async function clearAll() {
+  const entered = enteredCount.value
+  if (!entered) return
+
+  const confirmed = await new Promise((resolve) => {
+    uni.showModal({
+      title: '清空重录',
+      content: `将清空已录入的 ${entered} 项实际数量，可以重新盘点。\n（不会影响账面数）`,
+      confirmText: '清空',
+      success: (res) => resolve(res.confirm)
+    })
+  })
+  if (!confirmed) return
+
+  check.value.items.forEach((item) => {
+    item.actual_stock = ''
+    item.error = ''
+    item.difference = undefined
+  })
+  uni.showToast({ title: '已清空，可重新录入', icon: 'none' })
 }
 
 async function loadCheck() {
@@ -208,7 +250,9 @@ async function onSubmit() {
       content:
         `本次提交 ${items.length} 项，其中 ${diffCount.value} 项有差异。\n` +
         (remaining > 0 ? `还有 ${remaining} 项没盘到，这次不会提交。\n` : '') +
-        '提交后需由老板/管理员审核才改库存。',
+        // 2026-10-09：老板已不参与审核（check.review = admin/director），文案跟着改，
+        // 否则仓管会一直等老板点审核。
+        '提交后需由管理员/厂长审核才改库存。',
       confirmText: '确认提交',
       success: (res) => resolve(res.confirm)
     })
@@ -233,10 +277,10 @@ async function onSubmit() {
   }
 }
 
-onMounted(() => {
-  const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1]
-  checkId.value = currentPage.$page?.options?.id || ''
+// 页面参数必须用 uni-app 的 onLoad 拿：getCurrentPages().$page.options 在
+// 微信小程序端拿不到 id（H5 能拿到），导致详情页数据全空、按钮不显示（V4 实测踩坑）
+onLoad((options) => {
+  checkId.value = (options && options.id) || ''
   loadCheck()
 })
 </script>
@@ -304,10 +348,24 @@ onMounted(() => {
     color: #666;
   }
 
+  .quick-ops {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+  }
+
   .quick-fill {
     font-size: 24rpx;
     color: #8A6A10;
     background: #fef3c7;
+    padding: 8rpx 20rpx;
+    border-radius: 30rpx;
+  }
+
+  .quick-clear {
+    font-size: 24rpx;
+    color: #e74c3c;
+    background: #fdecea;
     padding: 8rpx 20rpx;
     border-radius: 30rpx;
   }

@@ -147,3 +147,54 @@
 ---
 
 **部署完成后，系统就可以正式使用了。**
+
+---
+
+# ⛔ 生产环境数据安全红线（2026-10-12 新增，必读）
+
+> 背景：2026-10-12 发生过一次**清理脚本误删真实单据**的事故。事后已加装硬性保护，
+> 但**生产部署时仍必须逐项确认**下面几条，否则保护形同虚设。
+
+## 一、必须确认的环境变量
+
+| 变量 | 生产要求 | 说明 |
+|---|---|---|
+| `NODE_ENV` | `production` | 生产环境**必须**是 production。为 production 时，任何破坏性脚本/硬删除 SQL **一律被拒绝**，无绕过手段 |
+| `ALLOW_DESTRUCTIVE` | **不要出现 / 设为 0** | 破坏性脚本的总开关。**只在开发机**设为 1。生产若误设为 1，虽然 `NODE_ENV=production` 那层仍会拦住，但绝不应依赖兜底 |
+| `ALLOW_DEV_LOGIN` | `false` | 否则任何人可拿测试身份登录 |
+
+## 二、部署后自检（务必执行）
+
+```bash
+cd /opt/shenglong/server
+
+# 1. 确认环境标识正确
+grep -E '^(NODE_ENV|ALLOW_DESTRUCTIVE|ALLOW_DEV_LOGIN)' .env
+
+# 2. 安全闸门自检：应全部通过（其中「生产环境发 DELETE 被拦截」必须为 ✅）
+npm run test:security
+```
+
+## 三、⛔ 绝对禁止在生产执行的脚本
+
+以下脚本会**物理删除或批量改写数据**，只允许在开发机跑（生产环境执行会被闸门拒绝，但请不要尝试）：
+
+- `tests/cleanup-test-data.js`、`tests/v2-test-cleanup.js`
+- `tests/audit-cleanup.js`、`tests/user-test-cleanup.js`（**会清空整张单据/流水表**）
+- `scripts/seed-sim-stock.js`（模拟数据灌入）
+- `src/db/apply-material-code.js`、`src/db/apply-subcategory.js`（一次性数据修复）
+- 任何 `tests/` 下的测试套件
+
+**生产允许执行的数据库脚本**（幂等、非破坏）：
+`npm run db:init`、`npm run db:seed`、`npm run import:materials`、`npm run db:migrate*`、`npm run db:reset-admin`
+
+## 四、保护机制说明
+
+破坏性操作有三层保护，缺一不可：
+
+1. **脚本层**：破坏性脚本入口调用 `assertDestructive()`，不满足条件直接退出（exit 2），**一个字节都不写**。
+2. **连接池层**（真防线，绕不过）：`src/db/pool.js` 拦截所有 `DELETE FROM` / `TRUNCATE` / `DROP TABLE` 语句 —— 本系统的**业务代码零硬删除**（全部软删除 `is_deleted=1`），所以此拦截**不会误伤任何正常业务**。
+3. **回归测试**：`npm run test:security` 锁死上述机制，防止将来被改坏。
+
+⚠️ 若要临时在生产执行一次性数据修复，正确做法是**先备份全库**，再临时设置 `ALLOW_DESTRUCTIVE=1` 执行，**执行完立即改回 0**。
+

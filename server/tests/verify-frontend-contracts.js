@@ -86,6 +86,13 @@ const created = {
   // 记录基线，用于最后核对与清理
   const baseLog = await queryOne('SELECT COALESCE(MAX(id), 0) AS m FROM stock_logs')
   const baseLogId = Number(baseLog.m || 0)
+  // ⚠️ 判据必须用「条数」而不是「最大 id」：
+  //   历史上流水被删过，id 有空洞（实测 count=3869 而 max(id)=6996），
+  //   拿 count 和 max(id) 比永远不相等 → 这条断言恒假（2026-10-06 修正）。
+  const baseLogCount = Number((await queryOne('SELECT COUNT(*) AS c FROM stock_logs')).c || 0)
+  // 站内消息也要记基线：本轮提交出库单会给仓管投「待确认」消息，
+  // 若不清掉会留下**孤儿消息**（单据已删、消息还在）——2026-10-10 实测踩到。
+  const baseMsgCount = Number((await queryOne('SELECT COUNT(*) AS c FROM messages')).c || 0)
   const dirtyMaterials = await queryOne(
     'SELECT COUNT(*) AS c FROM materials WHERE is_deleted = 0 AND current_stock <> 0'
   )
@@ -131,7 +138,7 @@ const created = {
     unit: '个',
     warehouse_id: whForTest._id,
     warning_stock: 0
-  }, wz.token)
+  }, zl.token) // 2026-10-09：老板只读后 material.upsert 收回 boss → 改用仓管建测试料
   const matB = await call('material', 'upsert', {
     name: `${TAG}临时料B`,
     spec: `CT-B-${Date.now()}`,
@@ -139,7 +146,7 @@ const created = {
     unit: '个',
     warehouse_id: whForTest._id,
     warning_stock: 0
-  }, wz.token)
+  }, zl.token)
 
   ok('创建临时物料 A（验证用，结束时删除）', matA.code === 0, matA.message)
   ok('创建临时物料 B（验证用，结束时删除）', matB.code === 0, matB.message)
@@ -151,7 +158,7 @@ const created = {
   ok('物料档案接口拒绝直接写库存（P0-3.8：不能凭空写数）',
     (await call('material', 'upsert', {
       name: `${TAG}不该成功`, warehouse_id: whForTest._id, current_stock: 999
-    }, wz.token)).code !== 0)
+    }, zl.token)).code !== 0)
 
   /* ============================================================
    * 3. 首页「被驳回提醒」（outbound/myNotice）
@@ -256,12 +263,15 @@ const created = {
   let pendingOrder = null
   if (idA) {
     // 用临时料造一张待确认出库单（先给临时料入点货，才能出库）
+    // ⚠️ 2026-10-03 流程重构 V2 起「入库归仓管」：inbound.submit 只放行
+    //    storekeeper/boss/admin，采购员已无此权限。这里必须用仓管 zl 铺底，
+    //    否则调用直接 403，后面的出库/对账用例会连锁失败（原来用的是 ln=采购员）。
     const inSeed = await call('inbound', 'submit', {
       items: [{ material_id: idA, quantity: 10, unit_price: 5 }],
       supplier: `${TAG}种子`,
       remark: `${TAG}为出库验证铺底`,
       warehouse_id: whForTest._id
-    }, ln.token)
+    }, zl.token)
     if (inSeed.code === 0) {
       created.inboundOrderIds.push(inSeed.data._id)
       created.orderNos.push(inSeed.data.order_no)
@@ -280,7 +290,7 @@ const created = {
     }
   }
 
-  ok('可用临时料造出待确认出库单（验证前置）', !!pendingOrder)
+  ok('可用临时料造出待确认出库单（验证前置）', !!pendingOrder, '（前置：仓管入库铺底 → 领料员出库）')
 
   if (pendingOrder) {
     const d = await call('outbound', 'detail', { id: pendingOrder }, zl.token)
@@ -360,8 +370,9 @@ const created = {
       g.action !== undefined && g.detail !== undefined)
   }
 
-  const warnFocus = await call('stats', 'warning', { page: 1, pageSize: 5, includeIdle: false }, wz.token)
-  const warnAll = await call('stats', 'warning', { page: 1, pageSize: 5, includeIdle: true }, wz.token)
+  // 2026-10-09：stats.warning 已收回 boss（老板端只留看板+库存流水）→ 改用仓管查预警
+  const warnFocus = await call('stats', 'warning', { page: 1, pageSize: 5, includeIdle: false }, zl.token)
+  const warnAll = await call('stats', 'warning', { page: 1, pageSize: 5, includeIdle: true }, zl.token)
   ok('预警默认聚焦（隐藏从未出入库的档案料）', warnFocus.code === 0, warnFocus.message)
   ok('includeIdle=true 时返回条数 >= 默认（开关真的生效）',
     warnAll.code === 0 && warnFocus.code === 0 &&
@@ -409,7 +420,7 @@ const created = {
       supplier: `${TAG}改价验证`,
       remark: `${TAG}多明细改价，验证后作废`,
       warehouse_id: whForTest._id
-    }, ln.token)
+    }, zl.token)
     ok('用临时料构造多明细入库单（改价验证前置）', createdIn.code === 0, createdIn.message)
 
     if (createdIn.code === 0) {
@@ -417,7 +428,8 @@ const created = {
       created.inboundOrderIds.push(oid)
       created.orderNos.push(createdIn.data.order_no)
 
-      const legacy = await call('inbound', 'updatePrice', { id: oid, unit_price: 1 }, ln.token)
+      // 改价同样归仓管（inbound.updatePrice 只放行 storekeeper/boss/admin）
+      const legacy = await call('inbound', 'updatePrice', { id: oid, unit_price: 1 }, zl.token)
       ok('多明细单用旧写法（整单同价）被明确拒绝（防整单被覆盖）', legacy.code !== 0, legacy.message)
       ok('拒绝提示是中文且说清原因',
         legacy.code !== 0 && /明细|指定|material_id/i.test(legacy.message || ''), legacy.message)
@@ -425,11 +437,11 @@ const created = {
       const precise = await call('inbound', 'updatePrice', {
         id: oid,
         items: [{ material_id: idA, unit_price: 12.5 }]
-      }, ln.token)
+      }, zl.token)
       ok('按 items[].material_id 精确改价成功（前端弹层用的就是这种入参）',
         precise.code === 0, precise.message)
 
-      const after = await call('inbound', 'detail', { id: oid }, ln.token)
+      const after = await call('inbound', 'detail', { id: oid }, zl.token)
       const its = after.code === 0 ? (after.data.items || []) : []
       const a = its.find((x) => Number(x.material_id) === Number(idA))
       const b = its.find((x) => Number(x.material_id) === Number(idB))
@@ -437,7 +449,7 @@ const created = {
         a && b && Number(a.unit_price) === 12.5 && Number(b.unit_price) === 20,
         `改了 ${a ? a.unit_price : '?'} / 未改 ${b ? b.unit_price : '?'}`)
 
-      const detailIn = await call('inbound', 'detail', { id: oid }, ln.token)
+      const detailIn = await call('inbound', 'detail', { id: oid }, zl.token)
       ok('入库详情明细带 current_stock（对账看现存）',
         detailIn.code === 0 && ((detailIn.data.items || [])[0] || {}).current_stock !== undefined)
     }
@@ -501,14 +513,15 @@ const created = {
   section('10. 清理本轮验证痕迹')
 
   // 单据先作废（回退库存），再删流水与记录
+  // 2026-10-09：老板只读后这三类作废都收回了 boss → 清理改用仓管（单子也都是仓管/领料员建的）
   for (const id of created.outboundOrderIds) {
-    await call('outbound', 'cancel', { id, reason: `${TAG}验证结束清理` }, wz.token).catch(() => {})
+    await call('outbound', 'cancel', { id, reason: `${TAG}验证结束清理` }, zl.token).catch(() => {})
   }
   for (const id of created.inboundOrderIds) {
-    await call('inbound', 'cancel', { id, reason: `${TAG}验证结束清理` }, wz.token).catch(() => {})
+    await call('inbound', 'cancel', { id, reason: `${TAG}验证结束清理` }, zl.token).catch(() => {})
   }
   for (const id of created.checkIds) {
-    await call('check', 'cancel', { id }, wz.token).catch(() => {})
+    await call('check', 'cancel', { id }, zl.token).catch(() => {})
   }
 
   // 删除本轮新增的库存流水（按基线 id 精确界定）
@@ -517,6 +530,25 @@ const created = {
     await execute(`DELETE FROM stock_logs WHERE related_order_id IN (${ph})`, created.orderNos)
   }
   await execute('DELETE FROM stock_logs WHERE id > ?', [baseLogId])
+
+  // 站内消息：按 ref_id 精确清（⚠️ 必须**先于**删单据，否则关联断了会留孤儿消息）
+  if (created.outboundOrderIds.length) {
+    const ph = created.outboundOrderIds.map(() => '?').join(',')
+    await execute(`DELETE FROM messages WHERE ref_type = 'outbound' AND ref_id IN (${ph})`, created.outboundOrderIds)
+  }
+  if (created.inboundOrderIds.length) {
+    const ph = created.inboundOrderIds.map(() => '?').join(',')
+    await execute(`DELETE FROM messages WHERE ref_type = 'inbound' AND ref_id IN (${ph})`, created.inboundOrderIds)
+  }
+  if (created.checkIds.length) {
+    const ph = created.checkIds.map(() => '?').join(',')
+    await execute(`DELETE FROM messages WHERE ref_type = 'check' AND ref_id IN (${ph})`, created.checkIds)
+  }
+  // 保险：单据号兜底（有的消息只带 ref_no）
+  if (created.orderNos.length) {
+    const ph = created.orderNos.map(() => '?').join(',')
+    await execute(`DELETE FROM messages WHERE ref_no IN (${ph})`, created.orderNos)
+  }
 
   // 删除本轮创建的单据与盘点单（含明细）
   if (created.inboundOrderIds.length) {
@@ -542,13 +574,16 @@ const created = {
   }
 
   const afterLog = await queryOne('SELECT COUNT(*) AS c FROM stock_logs')
+  const afterMsg = await queryOne('SELECT COUNT(*) AS c FROM messages')
   const afterMat = await queryOne(
     'SELECT COUNT(*) AS c FROM materials WHERE is_deleted = 0 AND current_stock <> 0'
   )
   const afterZero = await queryOne('SELECT COUNT(*) AS c FROM materials WHERE is_deleted = 0')
 
-  ok('本轮新增的库存流水已全部清除', Number(afterLog.c) === baseLogId || Number(afterLog.c) === 0,
-    `剩余 ${afterLog.c} 条`)
+  ok('本轮新增的库存流水已全部清除', Number(afterLog.c) === baseLogCount,
+    `验证前 ${baseLogCount} 条，现在 ${afterLog.c} 条`)
+  ok('本轮产生的站内消息已全部清除（不留孤儿消息）', Number(afterMsg.c) === baseMsgCount,
+    `验证前 ${baseMsgCount} 条，现在 ${afterMsg.c} 条`)
   ok('真实物料库存仍未被污染', Number(afterMat.c) === Number(dirtyMaterials.c || 0),
     `验证前 ${dirtyMaterials.c} 条非零，现在 ${afterMat.c} 条`)
   ok('真实物料条数未减少（1909 条级别）', Number(afterZero.c) >= 1900, `当前 ${afterZero.c} 条`)

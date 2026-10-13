@@ -1,0 +1,207 @@
+/**
+ * 迁移：出库单 2 态 → 4 态（流程重构 V2 · P2 领料线）
+ * ============================================================
+ * 改了什么：
+ *   1. status 枚举扩展：pending / picking / receiving / completed
+ *      （confirmed 作为历史遗留值保留在枚举里，避免 ALTER 时丢数据；
+ *        数据部分会把它统一转成 completed）
+ *   2. 新增字段：
+ *      pick_operator_openid / pick_operator_name / picked_at
+ *      receive_operator_openid / receive_operator_name / received_at
+ *      stock_deducted（是否已扣过库存，驳回/作废据此决定要不要回补）
+ *   3. 历史数据（关键，不能漏）：
+ *      老流程在「提交」那一刻就扣了库存，所以迁移前已存在的单据，
+ *      只要没被驳回/作废，库存其实都已经扣过了 → 一律标记 stock_deducted=1：
+ *        · confirmed（已确认生效）→ completed + stock_deducted=1
+ *        · pending  （还没确认，但库存已扣）→ 保持 pending + stock_deducted=1
+ *      这样它们走到「确认收货」时不会再扣一次（receive 会看这个标记），
+ *      被驳回/作废时也能正确回补。
+ *      rejected / cancelled 保持 stock_deducted=0（老流程当时已回补过）。
+ *
+ * 用法：
+ *   npm run db:migrate-outbound        # 预演，只报告不写库
+ *   npm run db:migrate-outbound -- --apply   # 真正执行
+ *
+ * 幂等：重复执行安全（列已存在则跳过，数据 UPDATE 只影响指定状态的单）。
+ * ============================================================
+ */
+require('../config/env')
+
+const { pool } = require('./pool')
+
+const TABLE = 'outbound_orders'
+
+/** 目标状态枚举（confirmed 保留，仅为兼容历史数据） */
+const STATUS_ENUM = "ENUM('pending','picking','receiving','completed','confirmed','cancelled','rejected')"
+
+const NEW_COLUMNS = [
+  { name: 'pick_operator_openid', ddl: "VARCHAR(64) DEFAULT NULL COMMENT '拣货完成操作人' AFTER `confirmed_at`" },
+  { name: 'pick_operator_name', ddl: "VARCHAR(64) DEFAULT NULL AFTER `pick_operator_openid`" },
+  { name: 'picked_at', ddl: "DATETIME DEFAULT NULL COMMENT '拣货完成时间（此刻通知领料员来收货）' AFTER `pick_operator_name`" },
+  { name: 'receive_operator_openid', ddl: "VARCHAR(64) DEFAULT NULL COMMENT '确认收货人' AFTER `picked_at`" },
+  { name: 'receive_operator_name', ddl: "VARCHAR(64) DEFAULT NULL AFTER `receive_operator_openid`" },
+  { name: 'received_at', ddl: "DATETIME DEFAULT NULL COMMENT '确认收货时间，库存在此刻扣减' AFTER `receive_operator_name`" },
+  {
+    name: 'stock_deducted',
+    ddl: "TINYINT NOT NULL DEFAULT 0 COMMENT '库存是否已扣减：1=已扣，0=未扣；驳回/作废据此决定是否回补' AFTER `received_at`"
+  }
+]
+
+async function columnInfo(column) {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT
+       FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [TABLE, column]
+  )
+  return rows[0] || null
+}
+
+async function tableExists() {
+  const [rows] = await pool.query('SHOW TABLES LIKE ?', [TABLE])
+  return rows.length > 0
+}
+
+async function main() {
+  const apply = process.argv.includes('--apply')
+
+  console.log('==============================================')
+  console.log('  迁移：出库单 2 态 → 4 态（领料线）')
+  console.log(`  模式：${apply ? '★ 执行（写库）' : '预演（只读，不改任何数据）'}`)
+  console.log('==============================================\n')
+
+  if (!(await tableExists())) {
+    console.error(`❌ 表 ${TABLE} 不存在，请先初始化数据库`)
+    await pool.end()
+    process.exit(1)
+  }
+
+  // ---------- 1. 检查 status 枚举 ----------
+  const statusCol = await columnInfo('status')
+  if (!statusCol) {
+    console.error('❌ 未找到 status 列，表结构异常')
+    await pool.end()
+    process.exit(1)
+  }
+  const needEnum =
+    !statusCol.COLUMN_TYPE.includes('picking') || !statusCol.COLUMN_TYPE.includes('receiving')
+
+  console.log('【1】status 枚举')
+  console.log(`   当前：${statusCol.COLUMN_TYPE}`)
+  console.log(`   目标：${STATUS_ENUM}`)
+  console.log(`   ${needEnum ? '→ 需要修改 ⚠️' : '→ 已是目标结构 ✓'}\n`)
+
+  // ---------- 2. 检查新增列 ----------
+  console.log('【2】新增字段')
+  const missing = []
+  for (const col of NEW_COLUMNS) {
+    const info = await columnInfo(col.name)
+    if (info) {
+      console.log(`   ${col.name.padEnd(26)} 已存在 ✓`)
+    } else {
+      console.log(`   ${col.name.padEnd(26)} 缺失，将新增 ＋`)
+      missing.push(col)
+    }
+  }
+  console.log(`   合计需新增 ${missing.length} 列\n`)
+
+  // ---------- 3. 历史数据处理 ----------
+  // 老流程：提交时就扣库存 → 迁移前存在的单据（非驳回/作废）库存都已扣过
+  const [statRows] = await pool.query(
+    `SELECT status, COUNT(*) AS c FROM \`${TABLE}\`
+      WHERE status IN ('pending','confirmed')
+      GROUP BY status`
+  )
+  const statMap = {}
+  let legacyTotal = 0
+  for (const r of statRows) {
+    statMap[r.status] = Number(r.c)
+    legacyTotal += Number(r.c)
+  }
+  const confirmedCount = statMap.confirmed || 0
+  const pendingCount = statMap.pending || 0
+
+  const [[allRow]] = await pool.query(`SELECT COUNT(*) AS c FROM \`${TABLE}\``)
+  const totalCount = Number(allRow.c || 0)
+
+  console.log('【3】历史数据')
+  console.log(`   单据总数：${totalCount}`)
+  console.log(`   待处理（迁移前已扣过库存）：${legacyTotal} 张`)
+  console.log(`     · confirmed → 转为 completed 并标记已扣：${confirmedCount} 张`)
+  console.log(`     · pending   → 保持待确认，但标记已扣（避免以后重复扣）：${pendingCount} 张`)
+  console.log(`   → 这些单走到「确认收货」时不会再扣一次；被驳回/作废时能正确回补`)
+  console.log(`   → 已驳回 / 已作废的历史单保持「未扣」，行为不变\n`)
+
+  if (!apply) {
+    console.log('----------------------------------------------')
+    console.log('预演结束，未改动任何数据。')
+    console.log('确认无误后执行：npm run db:migrate-outbound -- --apply')
+    console.log('----------------------------------------------')
+    await pool.end()
+    return
+  }
+
+  // ---------- 执行 ----------
+  console.log('----------------------------------------------')
+  console.log('开始执行…\n')
+
+  if (needEnum) {
+    await pool.query(
+      `ALTER TABLE \`${TABLE}\` MODIFY COLUMN \`status\` ${STATUS_ENUM} NOT NULL DEFAULT 'pending'`
+    )
+    console.log('   ✓ status 枚举已扩展')
+  } else {
+    console.log('   · status 枚举无需修改')
+  }
+
+  for (const col of missing) {
+    await pool.query(`ALTER TABLE \`${TABLE}\` ADD COLUMN \`${col.name}\` ${col.ddl}`)
+    console.log(`   ✓ 已新增列 ${col.name}`)
+  }
+
+  // 历史 confirmed 单：转 completed 并标记已扣库存
+  const [upd1] = await pool.query(
+    `UPDATE \`${TABLE}\`
+        SET status = 'completed', stock_deducted = 1
+      WHERE status = 'confirmed'`
+  )
+  console.log(`   ✓ 历史 confirmed 单已转为 completed，影响 ${upd1.affectedRows} 行`)
+
+  // 历史 pending 单：库存其实已扣（老流程提交即扣），补标记，防止将来重复扣
+  const [upd2] = await pool.query(
+    `UPDATE \`${TABLE}\`
+        SET stock_deducted = 1
+      WHERE status = 'pending' AND stock_deducted = 0`
+  )
+  console.log(`   ✓ 历史 pending 单已标记为「库存已扣」，影响 ${upd2.affectedRows} 行`)
+
+  // ---------- 复核 ----------
+  console.log('\n【复核】')
+  const after = await columnInfo('status')
+  console.log(`   status：${after.COLUMN_TYPE}`)
+  for (const col of NEW_COLUMNS) {
+    const info = await columnInfo(col.name)
+    console.log(`   ${col.name.padEnd(26)} ${info ? '✓' : '✗'}`)
+  }
+  const [[stat]] = await pool.query(
+    `SELECT
+       SUM(status = 'confirmed') AS confirmed_left,
+       SUM(status = 'completed') AS completed,
+       SUM(status = 'pending')   AS pending
+     FROM \`${TABLE}\``
+  )
+  console.log(`   数据：completed=${Number(stat.completed || 0)}  pending=${Number(stat.pending || 0)}  confirmed 残留=${Number(stat.confirmed_left || 0)}`)
+
+  console.log('\n✅ 迁移完成。请重启服务后生效。')
+  await pool.end()
+}
+
+main().catch(async (err) => {
+  console.error('\n❌ 迁移失败：', err && err.message ? err.message : err)
+  try {
+    await pool.end()
+  } catch (e) {
+    /* 连接可能已断，忽略 */
+  }
+  process.exit(1)
+})

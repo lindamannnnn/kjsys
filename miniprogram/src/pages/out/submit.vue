@@ -1,5 +1,11 @@
 <template>
   <view class="container">
+    <!-- 成品仓出库模式提示（厂长）：仓库已锁定，不给切 -->
+    <view v-if="isFinishedOut" class="mode-banner">
+      <text class="mode-title">🚚 成品仓出库</text>
+      <text class="mode-desc">提交后由成品仓管拣货，拣完会通知你确认收货</text>
+    </view>
+
     <!-- 搜索栏 -->
     <view class="search-bar">
       <view class="search-input">
@@ -9,7 +15,7 @@
           class="input"
           placeholder="搜索物料名称/规格"
           placeholder-class="placeholder"
-          @input="onSearch"
+          @input="onSearchInput"
         />
       </view>
       <view class="scan-btn" @click="onScan">
@@ -57,20 +63,36 @@
         v-for="item in materialList"
         :key="item._id"
         class="material-item"
-        :class="{ disabled: item.current_stock <= 0, selected: isInCart(item._id) }"
+        :class="{ disabled: stockVisible && item.current_stock <= 0, selected: isInCart(item._id) }"
         @click="onSelectMaterial(item)"
       >
+        <!--
+          物料照片缩略图。
+          ⚠️ 没有照片时也占同样大小（显示「无图」）——不然列表高度会随有没有照片忽高忽低，
+             用户滑动手感很差，看起来还像加载失败。
+          ⚠️ 点缩略图只看大图，不能顺手把料加进清单，所以 @click 要 .stop。
+        -->
+        <image
+          v-if="item.image_fileid"
+          class="material-thumb"
+          :src="fullFileUrl(item.image_fileid)"
+          mode="aspectFill"
+          @click.stop="previewMaterial(item)"
+        />
+        <view v-else class="material-thumb material-thumb-empty">
+          <text>无图</text>
+        </view>
         <view class="material-info">
           <text class="material-name">{{ item.name }}</text>
           <text class="material-spec">{{ item.material_no ? item.material_no + ' · ' : '' }}{{ item.spec || '无规格' }} | {{ item.warehouse_name }}</text>
           <text v-if="item.sub_category" class="material-cat">{{ item.sub_category }}</text>
-          <text class="material-stock" :class="{ warning: item.current_stock <= item.warning_stock }">
+          <text v-if="stockVisible" class="material-stock" :class="{ warning: item.current_stock <= item.warning_stock }">
             库存: {{ item.current_stock }} {{ item.unit }}
           </text>
         </view>
         <view class="material-action">
           <text v-if="isInCart(item._id)" class="in-cart">已加入</text>
-          <text v-else class="select-text">{{ item.current_stock <= 0 ? '缺货' : '加入清单' }}</text>
+          <text v-else class="select-text">{{ stockVisible && item.current_stock <= 0 ? '缺货' : '加入清单' }}</text>
         </view>
       </view>
 
@@ -97,7 +119,7 @@
         <view v-for="(cartItem, index) in cartList" :key="cartItem.material_id" class="cart-item">
           <view class="cart-item-info">
             <text class="cart-item-name">{{ cartItem.material_name }}</text>
-            <text class="cart-item-stock">库存: {{ cartItem.current_stock }} {{ cartItem.unit }}</text>
+            <text v-if="stockVisible" class="cart-item-stock">库存: {{ cartItem.current_stock }} {{ cartItem.unit }}</text>
           </view>
           <view class="cart-item-qty">
             <!-- 数量快捷键 -->
@@ -165,7 +187,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { outboundApi, materialApi, warehouseApi } from '@/utils/api'
+import { debounce } from '@/utils/debounce'
+import { fullFileUrl } from '@/utils/cloud'
 
 // 搜索 + 列表
 const keyword = ref('')
@@ -202,24 +227,33 @@ function toggleCart() {
   cartExpanded.value = !cartExpanded.value
 }
 
+// ===== 成品仓出库模式（厂长用，2026-10-09 新增）=====
+// 厂长面板点「成品仓出库」进来会带 ?wh=chengpin：
+//   锁定仓库（只有一个仓库时切仓条自动隐藏）、出库类型换成成品出库常用的「销售/领用」。
+// ⚠️ 这里锁死只是体验，不是防线：后端 outbound.submit 里的 assertDirectorWarehouse
+//    会再按物料实际所属仓库判一次，改 URL 参数绕不过去。
+const lockedWhCode = ref('')
+const isFinishedOut = computed(() => !!lockedWhCode.value)
+
 // 数量快捷键
 const quickQtys = [10, 50, 100, 500]
 
-const outTypes = [
-  { value: 'lingyong', label: '领用' },
-  { value: 'xiaoshou', label: '销售' },
-  { value: 'baofei', label: '报废' },
-  { value: 'zengpin', label: '赠品' },
-  { value: 'repair', label: '维修' },
-  { value: 'tiaozheng', label: '调整' }
-]
+const outTypes = computed(() => (isFinishedOut.value
+  ? [{ value: 'sale', label: '销售' }, { value: 'lingyong', label: '领用' }]
+  : [{ value: 'lingyong', label: '领用' }, { value: 'repair', label: '维修' }]))
+
+// 领料员看不到库存（服务端脱敏后 current_stock 不存在），此时不做本地库存校验，
+// 缺不缺货由仓管确认时把关（不够会退单并写原因）
+const stockVisible = computed(() =>
+  materialList.value.length > 0 && materialList.value[0].current_stock !== undefined)
 
 const canSubmit = computed(() => {
   if (cartList.value.length === 0) return false
   if (!selectedType.value) return false
   return cartList.value.every(item => {
     const q = Number(item.quantity)
-    return q > 0 && Number.isInteger(q) && q <= item.current_stock && !item.error
+    const stockOk = !stockVisible.value || q <= Number(item.current_stock || 0)
+    return q > 0 && Number.isInteger(q) && stockOk && !item.error
   })
 })
 
@@ -233,13 +267,27 @@ function onSearch() {
   loadMaterials()
 }
 
+// 搜索框输入防抖（统一走 utils/debounce）：避免每敲一个字都请求一次。
+// 模板 @input 已改绑这个包装函数；onSearch 保留原名给扫码等需要立即搜索的场景用。
+const onSearchInput = debounce(onSearch, 300)
+
 /** 读取仓库列表（只有一个仓库时切换条自动隐藏） */
 async function loadWarehouses() {
   try {
     const res = await warehouseApi.list()
-    const list = res.list || []
+    let list = res.list || []
+    // 成品仓出库模式：只留锁定的那个仓库 → 切换条因长度为 1 自动隐藏
+    if (lockedWhCode.value) {
+      const hit = list.find(
+        (w) => String(w.code) === lockedWhCode.value || String(w._id) === lockedWhCode.value
+      )
+      if (!hit) {
+        uni.showToast({ title: '找不到指定仓库，请改用普通领料入口', icon: 'none', duration: 3000 })
+      }
+      list = hit ? [hit] : list
+    }
     warehouses.value = list
-    if (list.length && !warehouseId.value) {
+    if (list.length && (!warehouseId.value || lockedWhCode.value)) {
       warehouseId.value = list[0]._id
     }
   } catch (err) {
@@ -321,12 +369,21 @@ function onScan() {
 }
 
 // 加入清单
+/**
+ * 看物料大图。
+ * 领料员最怕的就是「名字规格都对、拿错型号」——货架上长得像的料太多，
+ * 有照片就能当面核一遍（照片由管理员在后台物料档案里维护）。
+ */
+function previewMaterial(item) {
+  if (!item || !item.image_fileid) return
+  uni.previewImage({ urls: [fullFileUrl(item.image_fileid)] })
+}
+
 function onSelectMaterial(item) {
-  if (item.current_stock <= 0) {
+  if (stockVisible.value && item.current_stock <= 0) {
     uni.showToast({ title: '该物料缺货', icon: 'none' })
     return
-  }
-  if (isInCart(item._id)) {
+  }  if (isInCart(item._id)) {
     uni.showToast({ title: '已在清单中', icon: 'none' })
     return
   }
@@ -395,6 +452,11 @@ function decreaseQty(index) {
   if (num > 1) {
     item.quantity = String(num - 1)
     onQtyInput(index, { detail: { value: item.quantity } })
+  } else {
+    // 数量已是 1 再点「-」= 不要这项了，直接从清单移除（比留着 1 再长按删除顺手）
+    const name = item.material_name
+    cartList.value.splice(index, 1)
+    uni.showToast({ title: `已移除「${name}」`, icon: 'none' })
   }
 }
 
@@ -405,7 +467,10 @@ function setQuickQty(index, q) {
 }
 
 function onTypeChange(e) {
-  selectedType.value = outTypes[e.detail.value]
+  // ⚠️ outTypes 是 computed（成品仓模式要换成销售/领用），脚本里必须 .value——
+  //    模板里会自动拆包所以 :range="outTypes" 没事，但这里按下标取值不拆包就永远是 undefined
+  //    （2026-10-10 真机事故：类型选不了、提交按钮一直灰）
+  selectedType.value = outTypes.value[e.detail.value]
 }
 
 // 提交出库（批量）
@@ -462,12 +527,12 @@ async function onSubmit() {
 
     uni.showModal({
       // 上一次其实已成功、这次是重复提交（后端返回原单）时，文案要说清，避免用户以为下了两单
-      title: res.__duplicated ? '这笔已提交成功' : '出库成功',
+      title: res.__duplicated ? '这笔已提交成功' : '领料单已提交',
       content: res.__duplicated
         ? `上一次提交其实已经成功，这是同一张单\n单号: ${orderNo}`
-        : `单号: ${orderNo}\n共 ${itemCount} 项物料`,
+        : `单号: ${orderNo}\n共 ${itemCount} 项\n仓管确认拣货后会发消息通知你来收货`,
       confirmText: '查看记录',
-      cancelText: '继续出库',
+      cancelText: '继续领料',
       success: (r) => {
         if (r.confirm) {
           uni.navigateTo({ url: '/pages/out/history' })
@@ -487,6 +552,67 @@ onMounted(async () => {
   loadCategories()
   loadMaterials()
 })
+
+/**
+ * 「再来一单」（2026-10-09 新增）
+ * 从出库历史的某张单带过来 → 把原单明细预填进清单，数量可改，避免重复领料时重新一个个搜。
+ * 注意：库存可能已被脱敏（领料员看不到），预填后仍需仓管确认时把关。
+ */
+async function prefillFromOrder(orderId) {
+  uni.showLoading({ title: '载入原单…', mask: true })
+  try {
+    const res = await outboundApi.detail({ id: orderId })
+    const items = res.items || []
+    if (!items.length) {
+      uni.hideLoading()
+      uni.showToast({ title: '原单没有明细，无法再来一单', icon: 'none' })
+      return
+    }
+
+    cartList.value = items.map(it => ({
+      material_id: it.material_id,
+      material_name: it.material_name,
+      material_spec: it.material_spec,
+      unit: it.unit,
+      current_stock: it.current_stock,
+      warehouse_id: res.warehouse_id,
+      warehouse_name: res.warehouse_name || '',
+      quantity: String(it.quantity || 1),
+      error: ''
+    }))
+
+    // 单据类型沿用原单（领用/维修）；取不到就让用户自己选
+    // ⚠️ outTypes 是 computed，脚本里用要 .value（见 onTypeChange 的注释）
+    const t = outTypes.value.find(x => x.value === res.type)
+    if (t) selectedType.value = t
+
+    // 切到原单所在仓库，避免「物料列表是 A 仓、清单却是 B 仓」的错配
+    if (res.warehouse_id) {
+      warehouseId.value = res.warehouse_id
+      activeSub.value = ''
+      await loadCategories()
+      page.value = 1
+      noMore.value = false
+      await loadMaterials()
+    }
+
+    cartExpanded.value = true
+    uni.hideLoading()
+    uni.showToast({ title: `已载入原单 ${items.length} 项，请核对数量`, icon: 'none' })
+  } catch (err) {
+    uni.hideLoading()
+    uni.showToast({ title: err.message || '载入原单失败', icon: 'none' })
+  }
+}
+
+// 页面参数必须用 onLoad 拿（小程序端 getCurrentPages().$page.options 拿不到）
+onLoad((options) => {
+  if (options && options.from_order) {
+    prefillFromOrder(options.from_order)
+  }
+  // 成品仓出库模式（厂长面板进来）：wh=chengpin 或 wh=2
+  if (options && options.wh) lockedWhCode.value = String(options.wh)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -498,6 +624,27 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   background: #f5f5f5;
+}
+
+/* 成品仓出库模式提示条（厂长专属入口） */
+.mode-banner {
+  display: flex;
+  flex-direction: column;
+  background: #eef6ff;
+  border-bottom: 1rpx solid #cfe4f7;
+  padding: 20rpx 24rpx;
+
+  .mode-title {
+    font-size: 28rpx;
+    font-weight: bold;
+    color: #1b4f72;
+  }
+
+  .mode-desc {
+    font-size: 22rpx;
+    color: #5d7c94;
+    margin-top: 6rpx;
+  }
 }
 
 /* 仓库切换条 */
@@ -610,6 +757,27 @@ onMounted(async () => {
   padding: 30rpx;
   margin-bottom: 20rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+
+  /* 物料照片缩略图：有图/无图都占同样大小，列表高度才稳定 */
+  .material-thumb {
+    width: 96rpx;
+    height: 96rpx;
+    border-radius: 12rpx;
+    margin-right: 20rpx;
+    flex-shrink: 0;
+    background: #f2f3f5;
+  }
+
+  .material-thumb-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    text {
+      font-size: 20rpx;
+      color: #c0c4cc;
+    }
+  }
 
   &.disabled {
     opacity: 0.5;

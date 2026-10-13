@@ -28,7 +28,7 @@
       <template #header>
         <div class="card-header">
           <span>盘点任务列表</span>
-          <el-button type="primary" size="small" @click="$router.push('/check/create')">
+          <el-button v-if="canSubmit" type="primary" size="small" @click="$router.push('/check/create')">
             <el-icon><Plus /></el-icon>创建盘点
           </el-button>
         </div>
@@ -44,7 +44,7 @@
         <el-table-column prop="warehouse_name" label="仓库" width="100" />
         <el-table-column label="盘点范围" min-width="160">
           <template #default="{ row }">
-            {{ scopeText(row.scope) }}
+            {{ scopeText(row.scope, row.warehouse_id) }}
           </template>
         </el-table-column>
         <el-table-column label="明细进度" width="140">
@@ -78,10 +78,10 @@
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleView(row)">
-              {{ row.status === 'pending' || row.status === 'in_progress' ? '录入' : '查看' }}
+              {{ (row.status === 'pending' || row.status === 'in_progress') && canSubmit ? '录入' : '查看' }}
             </el-button>
             <el-button
-              v-if="row.status === 'pending_review'"
+              v-if="row.status === 'pending_review' && canReview"
               type="success"
               size="small"
               @click="handleView(row, true)"
@@ -156,7 +156,7 @@
           <el-button @click="detailVisible = false">关闭</el-button>
 
           <el-button
-            v-if="editable"
+            v-if="editable && canSubmit"
             type="primary"
             :loading="submitting"
             @click="handleSubmitCheck"
@@ -164,13 +164,14 @@
             提交盘点结果
           </el-button>
 
-          <template v-if="detail.status === 'pending_review'">
+          <!-- 审核：只有厂长与管理员（老板已从盘点审核里收回，原先这里对所有人可见 → 点了 403） -->
+          <template v-if="detail.status === 'pending_review' && canReview">
             <el-button type="danger" :loading="submitting" @click="handleReview(false)">退回重盘</el-button>
             <el-button type="success" :loading="submitting" @click="handleReview(true)">审核通过并调账</el-button>
           </template>
 
           <el-button
-            v-if="detail.status && !['completed', 'cancelled'].includes(detail.status)"
+            v-if="canSubmit && detail.status && !['completed', 'cancelled'].includes(detail.status)"
             type="warning"
             :loading="submitting"
             @click="handleCancelTask"
@@ -189,6 +190,19 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { checkApi, warehouseApi, exportApi } from '@/api'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+
+/* ---------- 按角色显隐操作按钮（后端 check.js 的 roleRules 才是防线） ---------- */
+function has(...names) {
+  const roles = userStore.roles || []
+  return names.some((n) => roles.includes(n))
+}
+// 发起 / 录入 / 取消盘点：仓管、厂长、管理员
+const canSubmit = computed(() => has('storekeeper', 'admin', 'director'))
+// 审核（通过并调账 / 退回重盘）：只有厂长与管理员 —— 老板已从审核里收回
+const canReview = computed(() => has('admin', 'director'))
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -213,10 +227,27 @@ function typeText(type) {
   return map[type] || type
 }
 
-function scopeText(scope) {
-  if (!scope || (!scope.categories?.length && !scope.material_ids?.length)) return '全部物料'
-  if (scope.categories?.length) return `分类: ${scope.categories.join('、')}`
-  return `指定 ${scope.material_ids.length} 项`
+/**
+ * 细分类的显示名：成品仓=车间、配件仓=编号分类（与建单页 / 物料页同一口径）。
+ * warehouses 在本页已加载，直接本地映射，不必让后端多下发字段。
+ */
+function scopeLabel(warehouseId) {
+  const w = warehouses.value.find((x) => Number(x._id) === Number(warehouseId))
+  if (w && w.code === 'chengpin') return '车间'
+  if (w && w.code === 'peijian') return '编号分类'
+  return '分类'
+}
+
+function scopeText(scope, warehouseId) {
+  if (!scope) return '全部物料'
+  // 细分类（2026-10-12 起是真正的范围维度）；旧单可能只有 categories
+  const subs = Array.isArray(scope.sub_categories) ? scope.sub_categories : []
+  const cats = Array.isArray(scope.categories) ? scope.categories : []
+  const ids = Array.isArray(scope.material_ids) ? scope.material_ids : []
+  if (subs.length) return `${scopeLabel(warehouseId)}: ${subs.join('、')}`
+  if (cats.length) return `分类: ${cats.join('、')}`
+  if (ids.length) return `指定 ${ids.length} 项`
+  return '全部物料'
 }
 
 function statusText(status) {

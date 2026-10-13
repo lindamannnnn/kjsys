@@ -5,6 +5,40 @@
 require('../config/env')
 
 const mysql = require('mysql2/promise')
+const guard = require('./destructive-guard')
+
+/**
+ * ⛔ 破坏性 SQL 兜底闸门（2026-10-12）
+ * ------------------------------------------------------------
+ * 事实：**运行时应用代码零硬删除** —— 业务全部用软删除（`is_deleted = 1`），
+ *   全仓 `src/` 内不存在 `DELETE FROM` / `TRUNCATE` / `DROP`（已全量核查）。
+ *   所以这里拦截，**不会误伤任何正常业务**。
+ *
+ * 意义：不管是清理脚本、迁移脚本、还是将来别人新写的脚本，
+ *   只要在**生产环境**（或未显式开启 ALLOW_DESTRUCTIVE）下发一条硬删除，
+ *   都会在这里被**直接拦下并抛错** —— 这是绕不过去的最后一道防线。
+ */
+const DESTRUCTIVE_RE = /(^|[\s;(])(DELETE\s+FROM|TRUNCATE\b|DROP\s+(TABLE|DATABASE|SCHEMA))/i
+
+/** 去掉前导注释，避免 `/* xx *\/ DELETE ...` 绕过 */
+function stripLeadingComments(sql) {
+  return String(sql).replace(/^(\s|\/\*[\s\S]*?\*\/|--[^\n]*\n|#[^\n]*\n)+/, '')
+}
+
+function assertNotDestructive(sql) {
+  if (typeof sql !== 'string') return
+  const body = stripLeadingComments(sql)
+  if (!DESTRUCTIVE_RE.test(body)) return
+  const r = guard.checkDestructive('SQL 硬删除')
+  if (r.ok) return
+  const brief = body.replace(/\s+/g, ' ').slice(0, 120)
+  throw new Error(
+    `[安全闸门] 已拦截破坏性 SQL：${brief}\n` +
+    `  原因：${r.reason}\n` +
+    `  目标库：${guard.describeTarget()}\n` +
+    '  这是保护措施。生产环境禁止硬删除；本机开发请在 server/.env 设置 ALLOW_DESTRUCTIVE=1。'
+  )
+}
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || '127.0.0.1',
@@ -56,6 +90,7 @@ async function withTransaction(fn) {
 
 /** 查询多行 */
 async function query(sql, params = [], conn = null) {
+  assertNotDestructive(sql)
   const runner = conn || pool
   const [rows] = await runner.query(sql, params)
   return rows
@@ -69,6 +104,7 @@ async function queryOne(sql, params = [], conn = null) {
 
 /** 执行写操作，返回 { insertId, affectedRows } */
 async function execute(sql, params = [], conn = null) {
+  assertNotDestructive(sql)
   const runner = conn || pool
   const [result] = await runner.query(sql, params)
   return result

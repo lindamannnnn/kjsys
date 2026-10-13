@@ -1,0 +1,213 @@
+{
+  "生成时间": "2026/10/3 18:59:00",
+  "接口地址": "http://127.0.0.1:3000",
+  "数据标记": "[V2-SETUP]",
+  "岗位账号": [
+    {
+      "姓名": "张三",
+      "岗位": "车间领料员（配件仓）",
+      "账号": "zhangshan",
+      "密码": "zs123456",
+      "角色": [
+        "out"
+      ],
+      "可管仓库": [
+        1
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjcsIm9wZW5pZCI6IiIsInVzZXJuYW1lIjoiemhhbmdzaGFuIiwiaWF0IjoxNzkxMDI1MTM3LCJleHAiOjE3OTE2Mjk5Mzd9.Uhqyw9wPS13bVR5gUGBbW5-7fA6pJZubjeRwAjb8Nq0"
+    },
+    {
+      "姓名": "李娜",
+      "岗位": "采购员",
+      "账号": "lina",
+      "密码": "ln123456",
+      "角色": [
+        "purchase"
+      ],
+      "可管仓库": [
+        1,
+        2
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjgsIm9wZW5pZCI6IiIsInVzZXJuYW1lIjoibGluYSIsImlhdCI6MTc5MTAyNTEzOCwiZXhwIjoxNzkxNjI5OTM4fQ.jD2FrbHHxLS9SMdKjGoP6DsIuojeK51VKWiKBNkSzw8"
+    },
+    {
+      "姓名": "赵六",
+      "岗位": "仓管员（配件仓 + 成品仓）",
+      "账号": "zhaoliu",
+      "密码": "zl123456",
+      "角色": [
+        "storekeeper"
+      ],
+      "可管仓库": [
+        1,
+        2
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjksIm9wZW5pZCI6IiIsInVzZXJuYW1lIjoiemhhb2xpdSIsImlhdCI6MTc5MTAyNTEzOCwiZXhwIjoxNzkxNjI5OTM4fQ.bfJJI9UQ5AvOfggldWFZNOEcSSW49GXgSgGiLMrEj2c"
+    },
+    {
+      "姓名": "王总",
+      "岗位": "老板",
+      "账号": "wangzong",
+      "密码": "wz123456",
+      "角色": [
+        "boss"
+      ],
+      "可管仓库": [
+        1,
+        2
+      ],
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjEwLCJvcGVuaWQiOiIiLCJ1c2VybmFtZSI6Indhbmd6b25nIiwiaWF0IjoxNzkxMDI1MTM4LCJleHAiOjE3OTE2Mjk5Mzh9.weU7_dZLm7ZYtuUNVpKiLli-8MC6lOKrQLDUp17u29c"
+    }
+  ],
+  "测试物料": [
+    {
+      "名称": "【测试】火花塞 A型",
+      "规格": "TEST-SPK-A",
+      "仓库": 1,
+      "_id": 2100,
+      "当前库存": 100,
+      "预警值": 20
+    },
+    {
+      "名称": "【测试】点火线圈 B型",
+      "规格": "TEST-COIL-B",
+      "仓库": 1,
+      "_id": 2101,
+      "当前库存": 60,
+      "预警值": 15
+    },
+    {
+      "名称": "【测试】刹车片 C型",
+      "规格": "TEST-BRK-C",
+      "仓库": 1,
+      "_id": 2102,
+      "当前库存": 3,
+      "预警值": 5
+    },
+    {
+      "名称": "【测试】机油滤芯 D型",
+      "规格": "TEST-OIL-D",
+      "仓库": 1,
+      "_id": 2103,
+      "当前库存": 40,
+      "预警值": 30
+    },
+    {
+      "名称": "【测试】空气滤芯 E型",
+      "规格": "TEST-AIR-E",
+      "仓库": 1,
+      "_id": 2104,
+      "当前库存": 35,
+      "预警值": 30
+    },
+    {
+      "名称": "【测试】轴承 F型",
+      "规格": "TEST-BRG-F",
+      "仓库": 2,
+      "_id": 2105,
+      "当前库存": 50,
+      "预警值": 10
+    },
+    {
+      "名称": "【测试】齿轮 G型",
+      "规格": "TEST-GEAR-G",
+      "仓库": 2,
+      "_id": 2112,
+      "当前库存": 24,
+      "预警值": 8
+    }
+  ],
+  "灌库存方式": [
+    {
+      "渠道": "采购任务全流程",
+      "仓库": 1,
+      "任务号": "CG-20261003-001",
+      "项数": 2
+    },
+    {
+      "渠道": "仓管直接入库",
+      "仓库": 2,
+      "单号": "IN-20261003-002",
+      "项数": 2
+    }
+  ],
+  "待办清单": {
+    "张三": [
+      {
+        "单号": "OUT-20261003-001",
+        "状态": "待确认",
+        "该谁处理": "赵六"
+      },
+      {
+        "单号": "OUT-20261003-002",
+        "状态": "待收货",
+        "该谁处理": "张三（确认收货后才扣库存）"
+      }
+    ],
+    "李娜": [
+      {
+        "任务号": "CG-20261003-002",
+        "状态": "待领取",
+        "动作": "领取 + 采购录入"
+      },
+      {
+        "任务号": "CG-20261003-003",
+        "状态": "待收料",
+        "说明": "已录入，等仓管收料；若被退回需重填"
+      }
+    ],
+    "赵六": [
+      {
+        "单号": "OUT-20261003-001",
+        "状态": "待确认",
+        "动作": "确认或驳回"
+      },
+      {
+        "单号": "OUT-20261003-002",
+        "状态": "待收货",
+        "动作": "可代确认收货"
+      },
+      {
+        "单号": "OUT-20261003-003",
+        "状态": "待拣货",
+        "动作": "拣货完成"
+      },
+      {
+        "任务号": "CG-20261003-002",
+        "状态": "待领取",
+        "说明": "已发布，等采购员领取"
+      },
+      {
+        "任务号": "CG-20261003-003",
+        "状态": "待收料",
+        "动作": "收料入库 或 退回"
+      }
+    ],
+    "王总": [
+      {
+        "单号": "OUT-20261003-003",
+        "状态": "待拣货",
+        "说明": "成品仓出库单，可观察它是否卡住"
+      }
+    ]
+  },
+  "基线库存": {
+    "SPK_A": 100,
+    "COIL_B": 60,
+    "BRK_C": 3,
+    "OIL_D": 40,
+    "AIR_E": 35,
+    "BRG_F": 50,
+    "GEAR_G": 24
+  },
+  "重要语义": {
+    "库存变动时机": "V2：出库单在「确认收货」那一刻才扣库存（此前提交/确认/拣货都不动库存）；采购任务在仓管「收料入库」时才增加库存",
+    "出库四阶段": "pending 待确认 → picking 待拣货 → receiving 待收货 → completed 已完成",
+    "采购四阶段": "open 待领取 → taken 采购中 → purchased 待收料 → received 已入库",
+    "驳回与作废": "待确认/待拣货/待收货都能驳回（这三态库存未扣，不涉及回补）；已完成要管理员才能作废，作废会回补库存",
+    "角色": "out 领料员 / purchase 采购员 / storekeeper 仓管员 / boss 老板 / admin 管理员；原「入库员 in」已废弃并入仓管员",
+    "购买方式": "淘宝 / 京东 / 线下 / 其他",
+    "幂等": "同一次提交带相同 client_request_id 只会生效一次",
+    "仓库": "配件仓 = peijian 或 id 1；成品仓 = chengpin 或 id 2"
+  }
+}

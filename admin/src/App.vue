@@ -49,6 +49,7 @@ body {
 }
 
 #app {
-  min-height: 100vh;
+  /* --app-h 由 utils/viewport-fit.js 同步；取不到时退回 100vh */
+  min-height: var(--app-h, 100vh);
 }
 </style>

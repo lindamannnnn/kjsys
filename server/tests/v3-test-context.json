@@ -1,0 +1,159 @@
+{
+  "generated_at": "2026-10-03T14:19:58.229Z",
+  "base": "http://127.0.0.1:3000",
+  "mark": "[V3-SETUP]",
+  "login_mode": "dev_openid（模拟微信身份，不接真实微信）",
+  "identities": {
+    "out": {
+      "openid": "dev_out",
+      "real_name": "张三（模拟）",
+      "post": "车间领料员",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjI1LCJvcGVuaWQiOiJkZXZfb3V0IiwidXNlcm5hbWUiOiIiLCJpYXQiOjE3OTEwMzcxOTcsImV4cCI6MTc5MTY0MTk5N30.Dj-KMOYlb_8nSYDBIO8yVKdEzDQyfLZnQRpujEPZmU4",
+      "roles": [
+        "out"
+      ],
+      "warehouse_ids": [
+        1
+      ]
+    },
+    "sk": {
+      "openid": "dev_sk",
+      "real_name": "赵六（模拟）",
+      "post": "仓管员（配件仓+成品仓）",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjI3LCJvcGVuaWQiOiJkZXZfc2siLCJ1c2VybmFtZSI6IiIsImlhdCI6MTc5MTAzNzE5NywiZXhwIjoxNzkxNjQxOTk3fQ.alC3AoO7A3ndXODjzElnBGlVaWKeBX9U1qFzM3r60iA",
+      "roles": [
+        "storekeeper"
+      ],
+      "warehouse_ids": [
+        1,
+        2
+      ]
+    },
+    "purchase": {
+      "openid": "dev_purchase",
+      "real_name": "李娜（模拟）",
+      "post": "采购员",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjI4LCJvcGVuaWQiOiJkZXZfcHVyY2hhc2UiLCJ1c2VybmFtZSI6IiIsImlhdCI6MTc5MTAzNzE5NywiZXhwIjoxNzkxNjQxOTk3fQ.08M_BPIfWMYy7gboFAEigjOJHSmHHrO__YW843bGXbo",
+      "roles": [
+        "purchase"
+      ],
+      "warehouse_ids": [
+        1,
+        2
+      ]
+    },
+    "boss": {
+      "openid": "dev_boss",
+      "real_name": "王总（模拟）",
+      "post": "老板",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjI5LCJvcGVuaWQiOiJkZXZfYm9zcyIsInVzZXJuYW1lIjoiIiwiaWF0IjoxNzkxMDM3MTk3LCJleHAiOjE3OTE2NDE5OTd9.EtCjk8wTUqKzrvK7KUbkHoL4kWbl7p6GOSxPB3F8o84",
+      "roles": [
+        "boss"
+      ],
+      "warehouse_ids": [
+        1,
+        2
+      ]
+    }
+  },
+  "materials": {
+    "SPK_A": {
+      "_id": 2100,
+      "name": "【测试】火花塞 A型",
+      "warehouse_id": 1,
+      "unit": "个",
+      "warning_stock": 20,
+      "stock_now": 91
+    },
+    "COIL_B": {
+      "_id": 2101,
+      "name": "【测试】点火线圈 B型",
+      "warehouse_id": 1,
+      "unit": "个",
+      "warning_stock": 15,
+      "stock_now": 54
+    },
+    "BRK_C": {
+      "_id": 2102,
+      "name": "【测试】刹车片 C型",
+      "warehouse_id": 1,
+      "unit": "套",
+      "warning_stock": 5,
+      "stock_now": 11
+    },
+    "OIL_D": {
+      "_id": 2103,
+      "name": "【测试】机油滤芯 D型",
+      "warehouse_id": 1,
+      "unit": "个",
+      "warning_stock": 30,
+      "stock_now": 37
+    },
+    "AIR_E": {
+      "_id": 2104,
+      "name": "【测试】空气滤芯 E型",
+      "warehouse_id": 1,
+      "unit": "个",
+      "warning_stock": 30,
+      "stock_now": 22
+    },
+    "BRG_F": {
+      "_id": 2105,
+      "name": "【测试】轴承 F型",
+      "warehouse_id": 2,
+      "unit": "个",
+      "warning_stock": 10,
+      "stock_now": 52
+    },
+    "GEAR_G": {
+      "_id": 2112,
+      "name": "【测试】齿轮 G型",
+      "warehouse_id": 2,
+      "unit": "个",
+      "warning_stock": 8,
+      "stock_now": 47
+    }
+  },
+  "todos": {
+    "outbound": {
+      "pending": {
+        "id": 628,
+        "no": "OUT-20261003-038",
+        "status": "pending"
+      },
+      "picking": {
+        "id": 629,
+        "no": "OUT-20261003-039",
+        "status": "picking"
+      },
+      "receiving": {
+        "id": 630,
+        "no": "OUT-20261003-040",
+        "status": "receiving"
+      }
+    },
+    "purchase": {
+      "open": {
+        "id": 26,
+        "no": "CG-20261003-026",
+        "status": "open"
+      },
+      "taken": {
+        "id": 27,
+        "no": "CG-20261003-027",
+        "status": "taken"
+      },
+      "purchased": {
+        "id": 28,
+        "no": "CG-20261003-028",
+        "status": "purchased"
+      }
+    },
+    "check": {
+      "id": 176,
+      "no": "CHK-20261003-012",
+      "status": "draft",
+      "warehouse_id": 2
+    }
+  }
+}

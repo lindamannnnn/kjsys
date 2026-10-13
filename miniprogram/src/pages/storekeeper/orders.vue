@@ -22,6 +22,7 @@
       :refresher-enabled="true"
       :refresher-triggered="refreshing"
       @refresherrefresh="onRefresh"
+      @scrolltolower="onLoadMore"
     >
       <view
         v-for="item in displayList"
@@ -43,7 +44,9 @@
           <text class="material-name">{{ item.material_names || '无明细' }}</text>
           <text class="order-detail">
             {{ item.total_qty }}
-            <text v-if="item.kind === 'inbound'"> | 金额 ¥{{ item.total_amount }}</text>
+            <!-- 金额：后端 orderFlow 只对「成品仓」单据向仓管脱敏，
+                 配件仓入库单金额保留（采购对账用）→ 按数据有无判断即可 -->
+            <text v-if="item.kind === 'inbound' && item.total_amount != null"> | 金额 ¥{{ formatMoney(item.total_amount) }}</text>
           </text>
         </view>
 
@@ -65,6 +68,12 @@
         <text class="empty-icon">📋</text>
         <text class="empty-text">暂无单据</text>
       </view>
+
+      <view v-if="displayList.length" class="load-more">
+        <text v-if="loadingMore">加载中...</text>
+        <text v-else-if="noMore">已经到底了</text>
+        <text v-else>上拉加载更多</text>
+      </view>
     </scroll-view>
   </view>
 </template>
@@ -73,6 +82,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { onPageShow as onShow } from '@/utils/on-page-show'
 import { statsApi, warehouseApi, outboundApi, inboundApi, statusText } from '@/utils/api'
+import { formatMoney } from '@/utils/format'
 
 const currentType = ref('all')
 const currentWarehouse = ref('all')
@@ -88,6 +98,12 @@ const warehouseList = ref([])
 const allOrders = ref([])
 const displayList = ref([])
 const refreshing = ref(false)
+
+/* ---------- 分页 ---------- */
+const PAGE_SIZE = 100
+const page = ref(1)
+const noMore = ref(false)
+const loadingMore = ref(false)
 
 const warehouseNames = computed(() => ['全部仓库', ...warehouseList.value.map((w) => w.name)])
 const currentWarehouseName = computed(() => {
@@ -180,19 +196,47 @@ async function loadWarehouses() {
 }
 
 // 单据流水（出库 + 入库合并）
+function orderFlowParams(p) {
+  return {
+    page: p,
+    pageSize: PAGE_SIZE,
+    type: typeMap[currentType.value] || undefined
+  }
+}
+
+// 下拉刷新 / 切类型：页码归 1，列表整体替换（不追加）
 async function loadData() {
+  page.value = 1
+  noMore.value = false
   try {
-    const res = await statsApi.orderFlow({
-      page: 1,
-      pageSize: 100,
-      type: typeMap[currentType.value] || undefined
-    })
-    allOrders.value = res.list || []
+    const res = await statsApi.orderFlow(orderFlowParams(page.value))
+    const list = res.list || []
+    allOrders.value = list
+    if (list.length < PAGE_SIZE || list.length >= (res.total ?? Infinity)) noMore.value = true
     filterList()
   } catch (err) {
     uni.showToast({ title: err.message || '加载失败', icon: 'none' })
   } finally {
     refreshing.value = false
+  }
+}
+
+/** 上拉加载更多：追加下一页 */
+async function onLoadMore() {
+  if (noMore.value || loadingMore.value) return
+  loadingMore.value = true
+  const next = page.value + 1
+  try {
+    const res = await statsApi.orderFlow(orderFlowParams(next))
+    const list = res.list || []
+    page.value = next
+    allOrders.value = [...allOrders.value, ...list]
+    if (list.length < PAGE_SIZE || allOrders.value.length >= (res.total ?? Infinity)) noMore.value = true
+    filterList()
+  } catch (err) {
+    uni.showToast({ title: err.message || '加载更多失败', icon: 'none' })
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -301,6 +345,16 @@ onMounted(() => {
           color: #856404;
         }
 
+        &.picking {
+          background: #efeaf7;
+          color: #5b4b8a;
+        }
+
+        &.receiving {
+          background: #d1ecf1;
+          color: #0c5460;
+        }
+
         &.confirmed, &.completed {
           background: #d4edda;
           color: #155724;
@@ -376,5 +430,12 @@ onMounted(() => {
     font-size: 26rpx;
     color: #999;
   }
+}
+
+.load-more {
+  text-align: center;
+  padding: 30rpx 0;
+  font-size: 24rpx;
+  color: #999;
 }
 </style>

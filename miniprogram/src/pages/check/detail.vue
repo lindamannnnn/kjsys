@@ -38,6 +38,20 @@
     <view class="card">
       <view class="card-header">
         <text class="section-title">盘点差异明细</text>
+        <!-- 2026-10-09：整仓上千项时全量铺出来太重，且无差异项混在中间难挑。
+             默认只看有差异的，需要时切「全部」。 -->
+        <view class="diff-switch">
+          <text
+            class="diff-switch-item"
+            :class="{ active: onlyDiff }"
+            @click="onlyDiff = true"
+          >仅有差异</text>
+          <text
+            class="diff-switch-item"
+            :class="{ active: !onlyDiff }"
+            @click="onlyDiff = false"
+          >全部 {{ (check.items || []).length }}</text>
+        </view>
       </view>
       <view class="diff-summary">
         共 {{ (check.items || []).length }} 项，其中 {{ diffCount }} 项有差异
@@ -46,8 +60,11 @@
         </text>
       </view>
       <view class="card-body">
+        <view v-if="!displayItems.length" class="diff-empty">
+          ✅ 本次盘点没有差异项
+        </view>
         <view
-          v-for="item in check.items"
+          v-for="item in displayItems"
           :key="item.material_id"
           class="difference-item"
         >
@@ -74,7 +91,7 @@
       </view>
     </view>
 
-    <!-- 审核操作（待审核 + 老板/管理员） -->
+    <!-- 审核操作（待审核 + 管理员/厂长） -->
     <view v-if="canReview" class="review-bar">
       <button class="btn-reject" @click="onReview(false)">退回重盘</button>
       <button class="btn-approve" @click="onReview(true)">审核通过</button>
@@ -83,7 +100,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { formatDate } from '@/utils/format'
 import { checkApi } from '@/utils/api'
 import { useUserStore } from '@/store/user'
@@ -93,10 +111,13 @@ const userStore = useUserStore()
 const check = ref({})
 const checkId = ref('')
 const loading = ref(false)
+/** 差异明细是否只看有差异项（默认是；整仓上千项时全量太重） */
+const onlyDiff = ref(true)
 
-// 仅待审核状态下，老板/管理员可审核
+// 仅待审核状态下，管理员/厂长可审核（厂长有审核盘点的权限）
+// ⚠️ 2026-10-09 用户要求：老板不再参与审核 → 去掉 boss（后端 check.review 已同步收回）
 const canReview = computed(() =>
-  check.value.status === 'pending_review' && userStore.hasRole(['boss', 'admin'])
+  check.value.status === 'pending_review' && userStore.hasRole(['director', 'admin'])
 )
 
 const enteredCount = computed(() =>
@@ -110,6 +131,15 @@ const diffCount = computed(() =>
     it => it.difference !== null && it.difference !== undefined && Number(it.difference) !== 0
   ).length
 )
+
+/** 差异明细实际渲染的列表：默认过滤出「已录入且有差异」的项 */
+const displayItems = computed(() => {
+  const items = check.value.items || []
+  if (!onlyDiff.value) return items
+  return items.filter(
+    it => it.difference !== null && it.difference !== undefined && Number(it.difference) !== 0
+  )
+})
 
 function statusText(status) {
   const map = {
@@ -160,20 +190,44 @@ async function loadCheck() {
   }
 }
 
-// 审核：通过则按差异回写库存，退回则重新盘点
+// 审核：通过则按差异回写库存；退回则重新盘点（可填原因）
 async function onReview(approve) {
-  const confirmed = await new Promise((resolve) => {
-    uni.showModal({
-      title: approve ? '审核通过' : '退回重盘',
-      content: approve ? '通过后将按差异回写库存，是否确认？' : '退回后需重新盘点，是否确认？',
-      success: (res) => resolve(res.confirm)
+  let remark = ''
+
+  if (!approve) {
+    // 2026-10-09：退回时收集原因 —— 后端 check.review 本就支持 remark 入参，
+    // 原先不传，盘点人只看到「已退回」不知道哪里要重盘，只能靠猜。
+    // 用 showModal 的 editable（微信基础库 2.17.1+）拿输入，不额外开页面。
+    const res = await new Promise((resolve) => {
+      uni.showModal({
+        title: '退回重盘',
+        editable: true,
+        placeholderText: '说明要重盘的原因，例如：成品仓 3 项数量对不上',
+        confirmText: '确认',
+        success: (r) => resolve(r)
+      })
     })
-  })
-  if (!confirmed) return
+    if (!res.confirm) return
+    remark = (res.content || '').trim()
+    if (!remark) {
+      uni.showToast({ title: '请填写退回原因', icon: 'none' })
+      return
+    }
+  } else {
+    const confirmed = await new Promise((resolve) => {
+      uni.showModal({
+        title: '审核通过',
+        content: '通过后将按差异回写库存，是否确认？',
+        confirmText: '通过',
+        success: (r) => resolve(r.confirm)
+      })
+    })
+    if (!confirmed) return
+  }
 
   uni.showLoading({ title: '处理中...', mask: true })
   try {
-    await checkApi.review({ id: checkId.value, approve })
+    await checkApi.review({ id: checkId.value, approve, remark })
     uni.hideLoading()
     uni.showToast({ title: approve ? '审核完成' : '已退回', icon: 'success' })
     loadCheck()
@@ -183,10 +237,10 @@ async function onReview(approve) {
   }
 }
 
-onMounted(() => {
-  const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1]
-  checkId.value = currentPage.$page?.options?.id || ''
+// 页面参数必须用 uni-app 的 onLoad 拿：getCurrentPages().$page.options 在
+// 微信小程序端拿不到 id（H5 能拿到），导致详情页数据全空、按钮不显示（V4 实测踩坑）
+onLoad((options) => {
+  checkId.value = (options && options.id) || ''
   loadCheck()
 })
 </script>
@@ -254,6 +308,32 @@ onMounted(() => {
       font-weight: 500;
       color: #333;
     }
+
+    /* 「仅有差异 / 全部」切换（2026-10-09 新增） */
+    .diff-switch {
+      display: flex;
+      border: 1rpx solid #e0e0e0;
+      border-radius: 30rpx;
+      overflow: hidden;
+
+      .diff-switch-item {
+        font-size: 22rpx;
+        color: #888;
+        padding: 6rpx 18rpx;
+
+        &.active {
+          background: #8A6A10;
+          color: #fff;
+        }
+      }
+    }
+  }
+
+  .diff-empty {
+    padding: 40rpx 0;
+    text-align: center;
+    font-size: 26rpx;
+    color: #27ae60;
   }
 
   .card-body {

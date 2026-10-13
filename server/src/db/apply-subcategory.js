@@ -26,6 +26,7 @@
 require('../config/env')
 
 const { pool, query, queryOne, execute } = require('./pool')
+const { assertDestructive } = require('./destructive-guard')
 
 /** 分组标题行的识别规则：名称以「车间」结尾（如「节能炉车间」） */
 const GROUP_HEADER_RE = /车间$/
@@ -157,6 +158,9 @@ async function reportPeijian() {
 }
 
 async function main() {
+  // ⛔ 安全闸门：一次性数据修复脚本，会把分组标题行软删、批量改写细分类 —— 生产禁止误跑
+  assertDestructive('物料细分类落地（一次性）', '将批量改写 materials.sub_category，并把分组标题行 is_deleted 置 1')
+
   console.log('==============================================')
   console.log('  胜龙进销存 · 物料细分类落地')
   console.log('==============================================')

@@ -82,7 +82,9 @@ if (String(allowDevLogin).toLowerCase() === 'true') {
 
 // ---------------------------------------------------------------- B. 接口地址
 const cloudSrc = fs.readFileSync(path.join(ROOT, 'src/utils/cloud.js'), 'utf8')
-const apiMatch = cloudSrc.match(/API_BASE\s*=\s*['"]([^'"]+)['"]/)
+// 兼容两种写法：直接赋值 const API_BASE = '...'，或带构建注入回退的
+// const API_BASE = (__API_BASE__) ? __API_BASE__ : 'http://...'（回退地址才是判定对象）
+const apiMatch = cloudSrc.match(/API_BASE[\s\S]{0,300}?['"](https?:\/\/[^'"]+)['"]/)
 const API_BASE = apiMatch ? apiMatch[1] : ''
 
 // DEV_MODE 自 2026-10-01 起改为「编译期注入」（vite define 的 __DEV_LOGIN__），

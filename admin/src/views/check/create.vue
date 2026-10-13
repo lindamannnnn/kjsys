@@ -22,11 +22,19 @@
           </el-radio-group>
         </el-form-item>
 
+        <!-- 盘点范围：按仓库语义切 —— 成品仓=车间，配件仓=编号分类
+             （2026-10-12 用户要求：原来用大类筛，成品仓恒为「成品」，勾不勾都等于整仓盘，
+               失去了「按车间盘」的能力 → 改用 sub_category） -->
         <el-form-item label="盘点范围" v-if="form.type !== 'full'">
-          <el-select v-model="form.categories" multiple placeholder="选择分类（不选 = 该仓库全部物料）">
-            <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
+          <el-select
+            v-model="form.subCategories"
+            multiple
+            :placeholder="`选择${subCategoryLabel}（不选 = 该仓库全部物料）`"
+            style="width: 420px"
+          >
+            <el-option v-for="c in subCategories" :key="c" :label="c" :value="c" />
           </el-select>
-          <div class="tip">共 {{ materialTotal }} 个物料可选；仅勾选分类时按分类生成盘点明细</div>
+          <div class="tip">共 {{ materialTotal }} 个物料可选；按{{ subCategoryLabel }}生成盘点明细</div>
         </el-form-item>
 
         <el-form-item label="冻结库存">
@@ -39,7 +47,7 @@
             <el-option
               v-for="u in assignees"
               :key="u._id"
-              :label="u.real_name || u.nickname"
+              :label="u.name"
               :value="u.openid"
             />
           </el-select>
@@ -57,7 +65,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { checkApi, warehouseApi, materialApi, userApi } from '@/api'
@@ -68,16 +76,36 @@ const loading = ref(false)
 const submitting = ref(false)
 
 const warehouses = ref([])
-const categories = ref([])
+/** 细分类选项：成品仓=车间、配件仓=编号分类（盘点范围的真正维度） */
+const subCategories = ref([])
 const assignees = ref([])
 const materialTotal = ref(0)
 
 const form = ref({
   warehouse_id: '',
   type: 'full',
-  categories: [],
+  /** 细分类（车间 / 编号分类）—— 盘点范围 */
+  subCategories: [],
   freeze_stock: true,
   assignee_openids: []
+})
+
+/** 当前选中仓库的 code（peijian / chengpin）—— 决定范围这一栏叫什么 */
+const currentWarehouseCode = computed(() => {
+  const w = warehouses.value.find((x) => Number(x._id) === Number(form.value.warehouse_id))
+  return (w && w.code) || ''
+})
+
+/**
+ * 细分类的显示名（与物料列表 / 编辑页 / 建单页同一个口径）：
+ *   成品仓 → 车间；配件仓 → 编号分类
+ * ⚠️ 不要用大类（category）做范围：成品仓恒为「成品」、配件仓恒为「配件」，
+ *    勾不勾都等于整仓盘（2026-10-12 用户反馈）。
+ */
+const subCategoryLabel = computed(() => {
+  if (currentWarehouseCode.value === 'chengpin') return '车间'
+  if (currentWarehouseCode.value === 'peijian') return '编号分类'
+  return '分类'
 })
 
 async function loadWarehouses() {
@@ -93,28 +121,31 @@ async function loadWarehouses() {
   }
 }
 
-/** 切换仓库时刷新分类与物料数量 */
+/** 切换仓库时刷新「范围」选项与物料数量 */
 async function handleWarehouseChange() {
-  form.value.categories = []
+  form.value.subCategories = []
   try {
     const [catRes, matRes] = await Promise.all([
       materialApi.categories({ warehouse_id: form.value.warehouse_id }),
       materialApi.list({ warehouse_id: form.value.warehouse_id, page: 1, pageSize: 1 })
     ])
-    categories.value = (catRes.data && catRes.data.list) || []
+    // 用细分类（车间 / 编号分类），不是大类
+    subCategories.value = (catRes.data && catRes.data.subCategories) || []
     materialTotal.value = (matRes.data && matRes.data.total) || 0
   } catch (err) {
     ElMessage.error(err.message || '加载盘点范围失败')
   }
 }
 
-/** 仅小程序用户才有 openid，可作为盘点人员 */
+/** 盘点人员候选：后端只回「有 openid 的小程序用户」（后台账号进不了小程序，当不了执行人） */
 async function loadAssignees() {
   try {
-    const res = await userApi.list({ page: 1, pageSize: 200, status: 'active' })
-    assignees.value = ((res.data && res.data.list) || []).filter((u) => u.openid)
+    const res = await userApi.assignees()
+    assignees.value = (res.data && res.data.list) || []
   } catch (err) {
-    console.warn('加载盘点人员失败:', err.message)
+    // 这里原来只 console.warn，结果仓管进来看到的是「人员下拉凭空消失」，查不出原因。
+    // 现在明确告诉用户：要么权限不够、要么后端没更新。
+    ElMessage.warning(err.message || '加载盘点人员失败，可先不指定人员直接创建')
   }
 }
 
@@ -124,16 +155,16 @@ async function handleSubmit() {
     return
   }
 
-  // 没选分类 = 整仓盘点。物料多时明细可能上千条，先二次确认再放行
-  const isFullScan = !(form.value.categories && form.value.categories.length)
+  // 没选范围 = 整仓盘点。物料多时明细可能上千条，先二次确认再放行
+  const isFullScan = !(form.value.subCategories && form.value.subCategories.length)
   if (isFullScan) {
     try {
       await ElMessageBox.confirm(
-        '你没有选择分类，这将盘点该仓库的全部物料，明细可能上千条、工作量很大。确定要整仓盘点吗？',
+        `你没有选择${subCategoryLabel.value}，这将盘点该仓库的全部物料，明细可能上千条、工作量很大。确定要整仓盘点吗？`,
         '整仓盘点确认',
         {
           confirmButtonText: '确定整仓盘点',
-          cancelButtonText: '我去选分类',
+          cancelButtonText: `我去选${subCategoryLabel.value}`,
           type: 'warning'
         }
       )
@@ -147,7 +178,9 @@ async function handleSubmit() {
     const res = await checkApi.create({
       type: form.value.type,
       warehouse_id: form.value.warehouse_id,
-      scope: { categories: form.value.categories, material_ids: [] },
+      // categories 传空：大类是仓库级字段（成品仓恒为「成品」），不参与范围；
+      // 真正的范围维度是 sub_categories（车间 / 编号分类）
+      scope: { categories: [], sub_categories: form.value.subCategories, material_ids: [] },
       assignee_openids: form.value.assignee_openids,
       freeze_stock: form.value.freeze_stock,
       confirm_full_scan: isFullScan

@@ -16,7 +16,7 @@
  *   P1-5    已提交待审的单还能被反复改数 → 现在 pending_review 拒绝再次提交
  *   P1-6    建单撞号直接 500 并泄漏数据库原始报错 → 现在自动重试 + 统一友好提示
  *   P1-7    备注 remark 传入即丢失 → 现在落库并可在详情查看
- *   P1-13   任意角色都能提交盘点结果 → 现在仅仓管/老板/管理员
+ *   P1-13   任意角色都能提交盘点结果 → 现在仅仓管/管理员/厂长
  *   P2      提交时传不存在的物料被静默忽略 → 现在明确报错
  * ============================================================
  */
@@ -29,6 +29,7 @@ const { resolveWarehouseId, resolveWarehouseIdOrDefault } = require('../services
 const { lockMaterialsSorted, adjustForCheck } = require('../services/stock')
 const { nextOrderNo } = require('../services/orderNo')
 const { operatorOf, hasAnyRole, identityOf } = require('../middleware/auth')
+const { pushMessage, MSG_TYPE, openidsByRoles } = require('../services/message')
 
 /** 盘点单未关闭状态（这些状态下的盘点单会与新建盘点范围冲突） */
 const OPEN_STATUS = ['pending', 'in_progress', 'pending_review']
@@ -52,6 +53,17 @@ async function writeOpLog(conn, p) {
 function assertCheckVisible(ctx, check) {
   if (hasAnyRole(ctx.user, ['boss', 'admin'])) return
   ctx.requireWarehouseAccess(check.warehouse_id, '该盘点单')
+
+  // 仓管员 / 厂长：本仓的全部盘点单都要看得见
+  // ⚠️ 整改（V3 测试 P1-3）：列表已经对仓管放开（见 list 里的说明），但详情这里
+  //   仍然要求「自己创建或被指派」，于是出现「列表里看得见、点进去 403」——
+  //   看得见点不开比直接看不到更让人窝火，而且盘点会直接改本仓库存，
+  //   仓管必须能查清是谁、什么时候盘的。上面 requireWarehouseAccess 已把范围
+  //   收敛到「本人在管的仓库」，这里不必再叠加归属限制。
+  //   ⚠️ 厂长必须一并放行：他要在待审核队列里点开**别人建的**盘点单去审核，
+  //   若只认「自己创建/被指派」，审核入口就等于永远点不开（2026-10-06 补）。
+  if (hasAnyRole(ctx.user, ['storekeeper', 'director'])) return
+
   const me = identityOf(ctx.user)
   const assignees = Array.isArray(check.assignee_openids) ? check.assignee_openids : []
   if (check.operator_openid !== me && !assignees.includes(me)) {
@@ -61,7 +73,10 @@ function assertCheckVisible(ctx, check) {
 
 /**
  * 创建盘点任务
- * 入参：{ type, warehouse_id, scope:{categories:[],material_ids:[]}, remark, assignee_openids, confirm_full_scan }
+ * 入参：{ type, warehouse_id, scope:{categories:[],sub_categories:[],material_ids:[]}, remark, assignee_openids, confirm_full_scan }
+ *   · categories     大类（仓库级，一个仓恒为一个值 → 实际等于整仓盘，保留只为兼容旧单）
+ *   · sub_categories 细分类（成品仓=车间、配件仓=编号分类）—— 2026-10-12 新增，
+ *                    这才是「按车间盘」的口径，前端已改用它
  * 兼容：也接受顶层 items:[{material_id}]（早期文档写错字段名，这里兜底）
  */
 async function create(ctx, data = {}) {
@@ -84,6 +99,7 @@ async function create(ctx, data = {}) {
   }
   const materialIds = rawIds.map(toDbId).filter(Boolean).map(Number)
   const categories = (scope.categories || []).filter(Boolean)
+  const subCategories = (scope.sub_categories || []).filter(Boolean)
 
   // 按范围查物料
   const where = ['is_deleted = 0', 'warehouse_id = ?']
@@ -96,6 +112,10 @@ async function create(ctx, data = {}) {
     where.push(`category IN (${categories.map(() => '?').join(',')})`)
     params.push(...categories)
   }
+  if (subCategories.length) {
+    where.push(`sub_category IN (${subCategories.map(() => '?').join(',')})`)
+    params.push(...subCategories)
+  }
 
   const materials = await query(`SELECT * FROM materials WHERE ${where.join(' AND ')} ORDER BY id`, params)
   if (!materials.length) {
@@ -103,7 +123,11 @@ async function create(ctx, data = {}) {
   }
 
   // 全盘守卫：范围为空且物料很多时，必须显式确认，避免误建上千项的单子
-  if (!materialIds.length && !categories.length && materials.length > FULL_SCAN_WARN_THRESHOLD && !data.confirm_full_scan) {
+  // ⚠️ 判据必须把 sub_categories 也算作「已选范围」，否则按车间盘会被误当成整仓盘拦下
+  if (
+    !materialIds.length && !categories.length && !subCategories.length &&
+    materials.length > FULL_SCAN_WARN_THRESHOLD && !data.confirm_full_scan
+  ) {
     return fail(
       400,
       `你未选择具体物料，这将创建一张覆盖整个仓库、共 ${materials.length} 项的全盘单。` +
@@ -212,10 +236,16 @@ async function list(ctx, data = {}) {
     params.push(...scope.params)
   }
 
-  // 非管理角色：只看自己参与或创建的
+  // 仓管 / 厂长：自己管的仓库里的盘点单都要看得见
+  //   盘点会直接改本仓库存，仓管如果看不见影响本仓的盘点单，就没法追责；
+  //   厂长要在这个列表里找到待审核的盘点单去审核，也必须看得见别人建的。
+  //   上面已经用 warehouseScope 把范围收敛到「本人在管的仓库」，
+  //   所以这里不再叠加「只看自己创建 / 被指派」的限制。
+  // 其余非管理角色：只看自己参与或创建的
   // ⚠️ 整改：原来只用 c.operator_openid = openid，而写入用 openid||username，
   //    账号密码登录（openid 为空）时两边不匹配 → 自己建的单据列表永远为空
-  if (!hasAnyRole(ctx.user, ['boss', 'admin'])) {
+  const seesWholeWarehouse = hasAnyRole(ctx.user, ['storekeeper', 'director'])
+  if (!hasAnyRole(ctx.user, ['boss', 'admin']) && !seesWholeWarehouse) {
     where.push('(c.operator_openid = ? OR JSON_CONTAINS(COALESCE(c.assignee_openids, JSON_ARRAY()), JSON_QUOTE(?)))')
     params.push(identityOf(ctx.user), identityOf(ctx.user))
   }
@@ -322,7 +352,7 @@ async function submit(ctx, data = {}) {
   if (check.status === 'pending_review') {
     return fail(
       400,
-      '该盘点单已提交，正在等待老板审核，不能再修改。如需重盘，请让老板先退回'
+      '该盘点单已提交，正在等待审核，不能再修改。如需重盘，请让审核人（厂长/管理员）先退回'
     )
   }
 
@@ -401,13 +431,46 @@ async function submit(ctx, data = {}) {
       ip: ctx.ip
     })
 
+    // 通知审批人（老板 / 管理员）来审核
+    // ⚠️ 整改（V3 测试 P1-10）：原先提交后不发任何消息，审批人根本不知道要去审，
+    //   盘点单就静静挂在「待审核」队列里，库存差异也一直不落账。
+    //   消息与单据同事务，不会出现「单提交了但通知没发出去」。
+    // 2026-10-09：老板不再参与审核，待审提醒只发 管理员 + 厂长
+    const approvers = await openidsByRoles(['admin', 'director'], conn)
+    if (approvers.length) {
+      await pushMessage({
+        toOpenids: approvers,
+        type: MSG_TYPE.CHECK_PENDING_REVIEW,
+        title: '有盘点单待审核',
+        content:
+          `${operator.name} 提交了 ${check.check_no}，共 ${recorded} 项` +
+          `（差异 ${diffCount} 项），审核后才会调整库存，请及时处理`,
+        refType: 'check', refId: id, refNo: check.check_no
+      }, conn)
+    }
+
     return { recorded, diffCount }
   })
 
   return ok(
     { recorded: result.recorded, diff: result.diffCount },
-    `盘点结果已提交，共 ${result.recorded} 项（差异 ${result.diffCount} 项），等待老板审核`
+    `盘点结果已提交，共 ${result.recorded} 项（差异 ${result.diffCount} 项），等待审核`
   )
+}
+
+/**
+ * 解析「通过 / 退回」表态
+ *
+ * ⚠️ 整改（V3 测试 P1-7）：原实现只把「完全不传」拦下，传 `"yes"` / `2` 这类
+ *   识别不了的值会掉进布尔判断里被静默当成 false → **静默退回**。
+ *   审批意图被反转却没有任何提示，而盘盈盘亏是直接动物流账的。
+ *   现在只认明确的通过/退回，其余一律返回 null 由调用方报错。
+ * @returns {boolean|null} null = 传了无法识别的值
+ */
+function parseApproveFlag(raw) {
+  if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true
+  if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false
+  return null
 }
 
 /**
@@ -426,7 +489,20 @@ async function review(ctx, data = {}) {
 
   // 兼容 approve / approved 两种写法（整改 P1-4）
   const rawApprove = data.approve !== undefined ? data.approve : data.approved
-  const approve = rawApprove === undefined ? true : !(rawApprove === false || rawApprove === 'false' || rawApprove === 0)
+  // 审核这种事必须明确表态：只有明确传「通过」或「退回」才受理。
+  // 传了乱七八糟的值（"yes" / 2 / 对象）一律报错拦下 ——
+  // 盘盈盘亏是要动物流账的，绝不能因为参数写错就默认放过（哪怕是默认退回）。
+  if (rawApprove === undefined || rawApprove === null || rawApprove === '') {
+    return fail(400, '请明确选择「通过」或「退回」')
+  }
+  const approve = parseApproveFlag(rawApprove)
+  if (approve === null) {
+    return fail(
+      400,
+      `「通过 / 退回」参数不合法（收到：${JSON.stringify(rawApprove)}）。` +
+      `请明确传「通过」或「退回」，不要传其他值`
+    )
+  }
   const remark = String(data.remark || '')
 
   const check = await queryOne('SELECT * FROM stock_checks WHERE id = ?', [id])
@@ -463,6 +539,21 @@ async function review(ctx, data = {}) {
           '（库存未做任何调整）',
         ip: ctx.ip
       })
+
+      // 2026-10-09：退回原因必须到得了盘点人手上。
+      // 原先只写操作日志，盘点人只看到「已退回」不知道哪里要重盘（用户走查反馈）。
+      // 与状态变更同事务，不会出现「单退回但消息没发」。
+      if (check.operator_openid && check.operator_openid !== operator.openid) {
+        await pushMessage({
+          toOpenids: [check.operator_openid],
+          type: MSG_TYPE.CHECK_REJECTED,
+          title: '盘点单被退回，需要重盘',
+          content:
+            `${check.check_no} 被 ${operator.name} 退回。` +
+            `原因：${remark || '未填写'}。请重新盘点后再提交`,
+          refType: 'check', refId: id, refNo: check.check_no
+        }, conn)
+      }
     })
     return ok({ approved: false, adjusted: 0 }, '已退回，库存未做任何调整，请重新盘点后再提交')
   }
@@ -575,11 +666,13 @@ module.exports = {
   name: 'check',
   publicActions: [],
   roleRules: {
-    create: ['boss', 'admin', 'storekeeper'],
+    // ⚠️ 2026-10-09 用户要求：老板只看看板与库存流水，不再参与任何审核/操作。
+    //   老板从这四项全部收回 → 盘点发起与审核归 管理员 + 仓管 + 厂长。
+    create: ['admin', 'storekeeper', 'director'],
     // 整改 P1-13：原先没写 submit，任何角色（含出库员、采购员）都能录入盘点结果
-    submit: ['storekeeper', 'boss', 'admin'],
-    review: ['boss', 'admin'],
-    cancel: ['storekeeper', 'boss', 'admin']
+    submit: ['storekeeper', 'admin', 'director'],
+    review: ['admin', 'director'],
+    cancel: ['storekeeper', 'admin', 'director']
   },
   actions: { create, list, detail, submit, review, cancel }
 }

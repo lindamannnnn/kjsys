@@ -79,7 +79,7 @@
       <view v-if="loading" class="tip">加载中...</view>
       <view v-else-if="noMore && list.length" class="tip">没有更多了</view>
       <view v-else-if="!list.length" class="empty">
-        <text class="empty-icon">📄</text>
+        <text class="empty-icon">📒</text>
         <text class="empty-text">这段时间没有库存流水</text>
       </view>
     </scroll-view>

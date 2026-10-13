@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi, setAccessToken, clearAccessToken, getAccessToken } from '@/api'
+import { clearCachedWarehouseCodes } from '@/constants/warehouse-scope'
 
 const USER_KEY = 'user_info'
 const MUST_CHANGE_KEY = 'must_change_password'
@@ -28,6 +29,9 @@ export const useUserStore = defineStore('user', () => {
     roles.value = (user && user.roles) || []
     if (user) localStorage.setItem(USER_KEY, JSON.stringify(user))
     else localStorage.removeItem(USER_KEY)
+    // 「我能看哪个仓」的缓存是跟着账号走的：一旦换人/登出必须清掉，
+    // 否则下一个账号会短暂沿用上一个人的仓库范围（Layout 会重新写）
+    clearCachedWarehouseCodes()
   }
 
   /** 写入/清除「必须改密」标记 */

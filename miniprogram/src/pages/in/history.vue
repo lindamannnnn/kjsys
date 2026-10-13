@@ -30,7 +30,8 @@
           <text class="order-no">{{ item.order_no }}</text>
           <view class="header-right">
             <text class="order-status" :class="item.status">{{ statusText(item.status) }}</text>
-            <text class="order-amount">¥{{ item.total_price }}</text>
+            <!-- 金额：后端 inbound.list 只对「成品仓」单据向仓管脱敏，配件仓保留 -->
+            <text v-if="item.total_price != null" class="order-amount">¥{{ formatMoney(item.total_price) }}</text>
           </view>
         </view>
         <view class="order-body">
@@ -65,7 +66,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { onPageShow as onShow } from '@/utils/on-page-show'
-import { formatDate } from '@/utils/format'
+import { formatDate, formatMoney } from '@/utils/format'
 import { inboundApi, statusText } from '@/utils/api'
 
 const startDate = ref(getDefaultDate(-7))
@@ -106,6 +107,9 @@ function totalQty(item) {
 function priceSummary(item) {
   const list = item.items || []
   if (!list.length) return ''
+  // 金额被脱敏（成品仓单据对仓管不下发 unit_price）→ 整行不显示。
+  // ⚠️ 不能退回「单价未填」：那是「采购员没填」的意思，会把脱敏误报成数据缺失。
+  if (!list.some((i) => i.unit_price !== undefined)) return ''
   if (list.length === 1) {
     const i = list[0]
     if (i.unit_price === null || i.unit_price === undefined) return '单价未填'

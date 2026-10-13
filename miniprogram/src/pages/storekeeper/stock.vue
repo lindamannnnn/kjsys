@@ -22,6 +22,22 @@
       />
     </view>
 
+    <!-- 细分类筛选（配件仓按编号分类 / 成品仓按车间） -->
+    <scroll-view v-if="subCategories.length" class="sub-bar" scroll-x>
+      <view
+        class="sub-chip"
+        :class="{ active: activeSub === '' }"
+        @click="onSubChange('')"
+      >全部</view>
+      <view
+        v-for="s in subCategories"
+        :key="s"
+        class="sub-chip"
+        :class="{ active: activeSub === s }"
+        @click="onSubChange(s)"
+      >{{ s }}</view>
+    </scroll-view>
+
     <!-- 库存列表 -->
     <scroll-view
       class="stock-list"
@@ -29,12 +45,24 @@
       :refresher-enabled="true"
       :refresher-triggered="refreshing"
       @refresherrefresh="onRefresh"
+      @scrolltolower="onLoadMore"
     >
       <view
         v-for="item in displayList"
         :key="item._id"
         class="stock-card"
       >
+        <!-- 物料照片缩略图（无照片时同尺寸占位，保证列表高度稳定） -->
+        <image
+          v-if="item.image_fileid"
+          class="material-thumb"
+          :src="fullFileUrl(item.image_fileid)"
+          mode="aspectFill"
+          @click.stop="previewMaterial(item)"
+        />
+        <view v-else class="material-thumb material-thumb-empty">
+          <text>无图</text>
+        </view>
         <view class="stock-info">
           <text class="material-name">{{ item.name }}</text>
           <text class="material-spec">{{ item.spec }} | {{ item.category }}</text>
@@ -52,6 +80,12 @@
         <text class="empty-icon">📦</text>
         <text class="empty-text">暂无物料</text>
       </view>
+
+      <view v-if="displayList.length" class="load-more">
+        <text v-if="loadingMore">加载中...</text>
+        <text v-else-if="noMore">已经到底了</text>
+        <text v-else>上拉加载更多</text>
+      </view>
     </scroll-view>
   </view>
 </template>
@@ -59,37 +93,101 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { onPageShow as onShow } from '@/utils/on-page-show'
-import { statsApi, warehouseApi } from '@/utils/api'
+import { statsApi, warehouseApi, materialApi } from '@/utils/api'
+import { debounce } from '@/utils/debounce'
+import { fullFileUrl } from '@/utils/cloud'
 
 const warehouses = ref([])
 const currentWarehouse = ref('')
 const keyword = ref('')
 const displayList = ref([])
 const refreshing = ref(false)
+const subCategories = ref([])
+const activeSub = ref('')
+
+/* ---------- 分页 ---------- */
+const PAGE_SIZE = 100
+const page = ref(1)
+const noMore = ref(false)
+const loadingMore = ref(false)
+
+/* ---------- 物料照片 ---------- */
+/**
+ * 看物料大图。
+ * 台账是拿来点货的：货架上同名同规格的料不少，有照片对着看一眼比读规格快得多。
+ * 照片由管理员/仓管在后台物料档案里维护，没有照片就没有可点的东西。
+ */
+function previewMaterial(item) {
+  if (!item || !item.image_fileid) return
+  uni.previewImage({ urls: [fullFileUrl(item.image_fileid)] })
+}
 
 function onWarehouseChange(id) {
   currentWarehouse.value = id
+  activeSub.value = ''
+  loadCategories()
   loadStock()
 }
 
-function onSearch() {
+function onSubChange(s) {
+  activeSub.value = activeSub.value === s ? '' : s
   loadStock()
 }
+
+async function loadCategories() {
+  try {
+    const res = await materialApi.categories({ warehouse_id: currentWarehouse.value || undefined })
+    subCategories.value = res.subCategories || []
+  } catch (err) {
+    subCategories.value = []
+  }
+}
+
+// 搜索防抖：统一走 @/utils/debounce，避免每敲一个字打一次接口
+const onSearch = debounce(() => loadStock(), 300)
 
 // 库存台账（真实接口）
+function stockParams(p) {
+  return {
+    page: p,
+    pageSize: PAGE_SIZE,
+    keyword: keyword.value,
+    sub_category: activeSub.value || undefined,
+    warehouse_id: currentWarehouse.value || undefined
+  }
+}
+
+// 下拉刷新 / 切仓 / 切分类 / 搜索：页码归 1，列表整体替换（不追加）
 async function loadStock() {
+  page.value = 1
+  noMore.value = false
   try {
-    const res = await statsApi.stockList({
-      page: 1,
-      pageSize: 100,
-      keyword: keyword.value,
-      warehouse_id: currentWarehouse.value || undefined
-    })
-    displayList.value = res.list || []
+    const res = await statsApi.stockList(stockParams(page.value))
+    const list = res.list || []
+    displayList.value = list
+    if (list.length < PAGE_SIZE || list.length >= (res.total ?? Infinity)) noMore.value = true
   } catch (err) {
     uni.showToast({ title: err.message || '加载失败', icon: 'none' })
   } finally {
     refreshing.value = false
+  }
+}
+
+/** 上拉加载更多：追加下一页 */
+async function onLoadMore() {
+  if (noMore.value || loadingMore.value) return
+  loadingMore.value = true
+  const next = page.value + 1
+  try {
+    const res = await statsApi.stockList(stockParams(next))
+    const list = res.list || []
+    page.value = next
+    displayList.value = [...displayList.value, ...list]
+    if (list.length < PAGE_SIZE || displayList.value.length >= (res.total ?? Infinity)) noMore.value = true
+  } catch (err) {
+    uni.showToast({ title: err.message || '加载更多失败', icon: 'none' })
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -99,6 +197,7 @@ async function loadWarehouses() {
   if (warehouses.value.length && !currentWarehouse.value) {
     currentWarehouse.value = warehouses.value[0]._id
   }
+  loadCategories()
 }
 
 function onRefresh() {
@@ -168,6 +267,29 @@ onMounted(() => {
   }
 }
 
+.sub-bar {
+  background: #fff;
+  padding: 12rpx 20rpx 16rpx;
+  white-space: nowrap;
+  border-bottom: 1rpx solid #f0f0f0;
+
+  .sub-chip {
+    display: inline-block;
+    padding: 10rpx 24rpx;
+    margin-right: 16rpx;
+    font-size: 24rpx;
+    color: #666;
+    background: #f5f5f5;
+    border-radius: 28rpx;
+
+    &.active {
+      background: #efeaf7;
+      color: #6b5b95;
+      font-weight: 500;
+    }
+  }
+}
+
 .stock-list {
   padding: 20rpx;
   height: calc(100vh - 200rpx);
@@ -182,6 +304,27 @@ onMounted(() => {
   padding: 30rpx;
   margin-bottom: 16rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+
+  /* 物料照片缩略图：有图/无图都占同样大小，列表高度才稳定 */
+  .material-thumb {
+    width: 88rpx;
+    height: 88rpx;
+    border-radius: 12rpx;
+    margin-right: 20rpx;
+    flex-shrink: 0;
+    background: #f2f3f5;
+  }
+
+  .material-thumb-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    text {
+      font-size: 20rpx;
+      color: #c0c4cc;
+    }
+  }
 
   .stock-info {
     flex: 1;
@@ -243,5 +386,12 @@ onMounted(() => {
     font-size: 26rpx;
     color: #999;
   }
+}
+
+.load-more {
+  text-align: center;
+  padding: 30rpx 0;
+  font-size: 24rpx;
+  color: #999;
 }
 </style>

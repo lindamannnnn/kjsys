@@ -43,6 +43,21 @@ admin/vite.config.js.timestamp-*
 # 本地审计 / 真机探针回传目录（临时取证用，不进仓库）
 .tmp-local-audit/
 
+# ---------- 本地构建产物 / 本地环境配置 ----------
+# devlocal 模式的构建产物（vite build --mode devlocal）
+admin/dist-local/
+**/dist-local/
+# 本地验证用的环境配置（指向本机后端，不该随仓库分发）
+.env.devlocal
+**/.env.devlocal
+
+# ---------- 测试产物（脚本入库，产物不入库）----------
+# 自动化测试跑出来的截图 / report.json / 数据备份
+**/tests/**/results/
+**/tests/**/_bak_*/
+# 临时取证截图
+docs/.task-create-*.png
+
 # ---------- 例外：需要入库的数据文件 ----------
 # 固化的配件编号数据（npm run apply:code 依赖，必须随仓库分发）
 !server/data/

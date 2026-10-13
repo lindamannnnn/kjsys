@@ -18,10 +18,14 @@
 require('../src/config/env')
 
 const { pool, query, execute, withTransaction } = require('../src/db/pool')
+const { assertDestructive } = require('../src/db/destructive-guard')
 
 const PRE = '【测试】'
 
 async function main() {
+  // ⛔ 安全闸门：本脚本会**清空整张单据/流水/供应商表**（无 WHERE），生产环境绝对不能跑
+  assertDestructive('4 角色使用者测试清理', '将清空 stock_checks/outbound_orders/inbound_orders/stock_logs/suppliers 等整表！')
+
   console.log('='.repeat(62))
   console.log('  4 角色真实使用者测试 · 清理')
   console.log('='.repeat(62))

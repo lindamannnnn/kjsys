@@ -117,6 +117,13 @@ function openMessage(item) {
     uni.navigateTo({ url: `/pages/out/detail?id=${item.ref_id}` })
   } else if (item.ref_type === 'inbound' && item.ref_id) {
     uni.navigateTo({ url: `/pages/in/detail?id=${item.ref_id}` })
+  } else if (item.ref_type === 'purchase_task' && item.ref_id) {
+    // 流程重构 V2 · P4：采购任务消息点进去看任务详情（领取/录入/收料都在那一页）
+    uni.navigateTo({ url: `/pages/purchase/task-detail?id=${item.ref_id}` })
+  } else if (item.ref_type === 'check' && item.ref_id) {
+    // 盘点待审（V3 整改 P1-10）：仓管提交盘点后通知老板/管理员来审核，
+    // 点消息直接进盘点单详情，在那儿审（不用自己去列表里翻）
+    uni.navigateTo({ url: `/pages/check/detail?id=${item.ref_id}` })
   }
 }
 

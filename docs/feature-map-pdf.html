@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>盛龙进销存 · 功能与链路说明</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #1a1a2e; font-size: 13px; line-height: 1.7;
+    padding: 36px 40px;
+  }
+  h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+  h2 {
+    font-size: 17px; font-weight: 700; margin: 26px 0 10px;
+    padding-left: 10px; border-left: 4px solid #185FA5;
+  }
+  h3 { font-size: 14px; font-weight: 700; margin: 16px 0 6px; color: #185FA5; }
+  p { margin: 6px 0; }
+  .sub { color: #666; font-size: 12px; }
+  .cover { text-align: center; padding: 60px 0 40px; }
+  .cover h1 { font-size: 30px; }
+  .cover .sub { margin-top: 14px; font-size: 13px; }
+  .box {
+    background: #f6f8fb; border: 1px solid #dce4ef; border-radius: 10px;
+    padding: 14px 18px; margin: 12px 0;
+  }
+  .box b { color: #185FA5; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+  th { background: #185FA5; color: #fff; padding: 7px 9px; text-align: left; font-weight: 500; }
+  td { border-bottom: 1px solid #e3e9f2; padding: 7px 9px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7fafd; }
+  .diagram { margin: 14px 0; }
+  .diagram svg { width: 100%; height: auto; }
+  .page-break { page-break-before: always; }
+  ul { padding-left: 20px; margin: 6px 0; }
+  li { margin: 3px 0; }
+  .tag {
+    display: inline-block; background: #E6F1FB; color: #0C447C;
+    border-radius: 4px; padding: 1px 8px; font-size: 11px; margin-right: 4px;
+  }
+  .warn { color: #A32D2D; }
+  @page { size: A4; margin: 12mm 10mm; }
+</style>
+</head>
+<body>
+
+<!-- ============ 封面 ============ -->
+<div class="cover">
+  <h1>盛龙进销存系统</h1>
+  <h1 style="font-size:20px; font-weight:500; color:#185FA5;">功能与业务链路说明</h1>
+  <p class="sub">盛龙汽配 · 内部管理系统（微信小程序 + 电脑后台）</p>
+  <p class="sub">2026 年 10 月</p>
+</div>
+
+<div class="box">
+  <b>这份说明书讲什么：</b>我们的系统现在能干什么、每笔货从进到出经过谁的手、
+  每一笔钱和每一件货在哪里留下记录。看完这一份，不需要懂技术也能明白整个流程。
+</div>
+
+<h2>一句话说明</h2>
+<p>系统分两端：<b>微信小程序</b>是给干活的人用的（领料、入库、采购、盘点，手机上点几下就完成）；
+<b>电脑后台</b>是给管理用的（看数据、管物料、管人、查日志）。两端数据实时同步，
+<b>每一次操作都留下记录</b>——谁、什么时候、动了什么、动了多少，全部可查。</p>
+
+<!-- ============ 系统总览 ============ -->
+<h2>一、系统长什么样</h2>
+<div class="diagram">
+<svg viewBox="0 0 680 514" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="20" y="30" width="310" height="250" rx="20" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="40" y="58" font-size="14" font-weight="500" fill="#0C447C">微信小程序 · 干活端</text>
+  <rect x="40" y="72" width="270" height="38" rx="8" fill="#B5D4F4" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="175" y="91" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0C447C">登录 / 首页（按身份显示入口）</text>
+  <rect x="40" y="120" width="270" height="38" rx="8" fill="#B5D4F4" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="175" y="139" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0C447C">领料 / 入库 / 采购 / 盘点 四条线</text>
+  <rect x="40" y="168" width="270" height="38" rx="8" fill="#B5D4F4" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="175" y="187" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0C447C">老板看板 / 仓管工作台</text>
+  <rect x="40" y="216" width="270" height="38" rx="8" fill="#B5D4F4" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="175" y="235" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0C447C">消息中心 / 我的</text>
+  <rect x="350" y="30" width="310" height="250" rx="20" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="370" y="58" font-size="14" font-weight="500" fill="#085041">电脑后台 · 管理端</text>
+  <rect x="370" y="72" width="270" height="38" rx="8" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="505" y="91" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#085041">数据看板 / 统计 / 排行 / 绩效</text>
+  <rect x="370" y="120" width="270" height="38" rx="8" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="505" y="139" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#085041">出库单 / 入库单 / 采购 / 盘点</text>
+  <rect x="370" y="168" width="270" height="38" rx="8" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="505" y="187" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#085041">物料 / 供应商 / 用户 / 角色</text>
+  <rect x="370" y="216" width="270" height="38" rx="8" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="505" y="235" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#085041">消息中心 / 操作日志 / 设置</text>
+  <line x1="175" y1="280" x2="175" y2="306" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="505" y1="280" x2="505" y2="306" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="20" y="310" width="640" height="110" rx="20" fill="#f6f8fb" stroke="#c8d2e0" stroke-width="0.5"/>
+  <text x="40" y="336" font-size="14" font-weight="500" fill="#1a1a2e">服务端 · 两端共用同一套数据和规则</text>
+  <rect x="40" y="348" width="295" height="56" rx="8" fill="#ffffff" stroke="#c8d2e0" stroke-width="0.5"/>
+  <text x="187" y="368" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#1a1a2e">每个请求先过三道检查</text>
+  <text x="187" y="388" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#666">登录了吗 → 这个岗位能干吗 → 这个仓归你管吗</text>
+  <rect x="345" y="348" width="295" height="56" rx="8" fill="#ffffff" stroke="#c8d2e0" stroke-width="0.5"/>
+  <text x="492" y="368" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#1a1a2e">所有操作自动记账留痕</text>
+  <text x="492" y="388" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#666">库存流水 + 操作日志 + 消息通知</text>
+  <line x1="340" y1="420" x2="340" y2="446" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="165" y="450" width="350" height="44" rx="8" fill="#f6f8fb" stroke="#c8d2e0" stroke-width="0.5"/>
+  <text x="340" y="472" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1a1a2e">数据库 · 物料 / 单据 / 流水 / 日志 / 消息</text>
+</svg>
+</div>
+
+<!-- ============ 角色 ============ -->
+<h2>二、谁能干什么（五个岗位）</h2>
+<table>
+  <tr><th style="width:110px">岗位</th><th>平时干什么</th><th style="width:180px">不能干什么（系统硬拦）</th></tr>
+  <tr><td><b>领料员</b></td><td>手机上提交领料单；货拣好了去核对、点「确认收货」</td><td>只能看自己仓的料、自己的单；不能开入库单</td></tr>
+  <tr><td><b>仓管员</b></td><td>确认领料单、拣货、开入库单、发采购任务、收料、盘点（配件仓和成品仓是同一位仓管）</td><td>不能管用户、不能改别人权限</td></tr>
+  <tr><td><b>采购员</b></td><td>领取采购任务，买完录入实际单价和单号（备注会自动保留建单原因）</td><td>不能直接入库（收料由仓管做）；不能审批</td></tr>
+  <tr><td><b>老板</b></td><td>手机看板看全局：库存值多少钱、哪些料快没了、今天进出多少；审批盘点；驳回有问题的单据</td><td>不能动「管理员」这个角色</td></tr>
+  <tr><td><b>管理员</b></td><td>后台管人：审核新账号、分配岗位和仓库、禁用离职账号</td><td>系统永远保住最后一个管理员，谁也无法把系统弄到没人能管</td></tr>
+</table>
+<div class="box">
+  <b>越权也会留痕：</b>有人点了不该点的功能，系统不但拒绝，还会记下「谁、想干什么」，
+  后台「操作日志」里随时可查。
+</div>
+
+<!-- ============ 链路 1 出库 ============ -->
+<div class="page-break"></div>
+<h2>三、货出去：领料出库（四步走，最后一步才真减库存）</h2>
+<div class="diagram">
+<svg viewBox="0 0 680 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="40" y="40" width="140" height="56" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="110" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">① 提交领料单</text>
+  <text x="110" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">领料员 · 手机提交</text>
+  <line x1="180" y1="68" x2="196" y2="68" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow1)"/>
+  <rect x="200" y="40" width="140" height="56" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="270" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">② 确认</text>
+  <text x="270" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">仓管 · 收到提醒</text>
+  <line x1="340" y1="68" x2="356" y2="68" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow1)"/>
+  <rect x="360" y="40" width="140" height="56" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="430" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">③ 拣货完成</text>
+  <text x="430" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">仓管 · 系统再核库存</text>
+  <line x1="500" y1="68" x2="516" y2="68" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow1)"/>
+  <rect x="520" y="40" width="140" height="56" rx="8" fill="#B5D4F4" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="590" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">④ 确认收货</text>
+  <text x="590" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">领料员 · 此刻才减库存</text>
+</svg>
+</div>
+<ul>
+  <li>每一步双方都会收到<b>消息提醒</b>（提交→仓管；拣完→领料员；收完→回执给仓管）。</li>
+  <li>单子没确认前、待拣货时，领料员可以撤销；<b>货拣好开始交接了就不能自己撤</b>，必须找仓管——防止货账对不上。</li>
+  <li>数量不够提交不了：系统按整张单合计校验库存，拆成多行也绕不过去。</li>
+  <li>仓管或老板发现单子有问题可以<b>驳回</b>，库存不受影响。</li>
+</ul>
+
+<!-- ============ 链路 2 采购 ============ -->
+<h2>四、货进来（一）：采购（三方接力，买和收分开）</h2>
+<div class="diagram">
+<svg viewBox="0 0 680 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="40" y="40" width="140" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="110" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">① 发布采购任务</text>
+  <text x="110" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">仓管 · 写清为什么买</text>
+  <line x1="180" y1="68" x2="196" y2="68" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <rect x="200" y="40" width="140" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="270" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">② 领取任务</text>
+  <text x="270" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">采购员 · 收到提醒</text>
+  <line x1="340" y1="68" x2="356" y2="68" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <rect x="360" y="40" width="140" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="430" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">③ 录入实际单价</text>
+  <text x="430" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">采购员 · 渠道+单号</text>
+  <line x1="500" y1="68" x2="516" y2="68" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <rect x="520" y="40" width="140" height="56" rx="8" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="590" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">④ 收料入库</text>
+  <text x="590" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">仓管 · 自动生成入库单</text>
+</svg>
+</div>
+<ul>
+  <li><b>买的人不管收，收的人不管买</b>：采购员只录买了多少钱，货到仓库由仓管点数收料，互相制约。</li>
+  <li>单价必须大于 0（填 0 这批货成本就失真了，系统直接拒绝）；建单时的备注和采购员的备注<b>两条都保留</b>。</li>
+  <li>收料时自动生成入库单，<b>库存增加、平均成本自动重算</b>（移动加权平均），不用二次录入。</li>
+</ul>
+
+<!-- ============ 链路 3 入库 ============ -->
+<h2>五、货进来（二）：仓管直接入库</h2>
+<div class="diagram">
+<svg viewBox="0 0 680 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="40" y="40" width="180" height="56" rx="8" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+  <text x="130" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#27500A">① 开入库单</text>
+  <text x="130" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#639922">仓管 · 必填供应商 + 单价&gt;0</text>
+  <line x1="220" y1="68" x2="246" y2="68" stroke="#639922" stroke-width="1.5" marker-end="url(#arrow4)"/>
+  <rect x="250" y="40" width="180" height="56" rx="8" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+  <text x="340" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#27500A">② 确认入库</text>
+  <text x="340" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#639922">仓管 · 单价填 0 / 负数被拒</text>
+  <line x1="430" y1="68" x2="456" y2="68" stroke="#639922" stroke-width="1.5" marker-end="url(#arrow4)"/>
+  <rect x="460" y="40" width="180" height="56" rx="8" fill="#C0DD97" stroke="#639922" stroke-width="0.5"/>
+  <text x="550" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#27500A">③ 库存增加</text>
+  <text x="550" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#3B6D11">自动 · 成本重算 + 写流水</text>
+</svg>
+</div>
+<p>供应商直接送货来时走这条路：仓管开入库单（<b>必须填供应商</b>，货从哪来必须留痕）→ 确认入库 →
+库存增加、成本自动重算。每一步都有单据、有流水，事后能追到每一批货的来源。</p>
+
+<!-- ============ 链路 4 盘点 ============ -->
+<div class="page-break"></div>
+<h2>六、账实核对：盘点（仓管盘、老板审）</h2>
+<div class="diagram">
+<svg viewBox="0 0 680 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="40" y="40" width="140" height="56" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+  <text x="110" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#633806">① 创建盘点</text>
+  <text x="110" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#BA7517">仓管 · 选仓库和范围</text>
+  <line x1="180" y1="68" x2="196" y2="68" stroke="#BA7517" stroke-width="1.5" marker-end="url(#arrow3)"/>
+  <rect x="200" y="40" width="140" height="56" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+  <text x="270" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#633806">② 录入实盘数</text>
+  <text x="270" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#BA7517">仓管 · 老板收到提醒</text>
+  <line x1="340" y1="68" x2="356" y2="68" stroke="#BA7517" stroke-width="1.5" marker-end="url(#arrow3)"/>
+  <rect x="360" y="40" width="140" height="56" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+  <text x="430" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#633806">③ 审批</text>
+  <text x="430" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#BA7517">老板 · 通过 / 退回</text>
+  <line x1="500" y1="68" x2="516" y2="68" stroke="#BA7517" stroke-width="1.5" marker-end="url(#arrow3)"/>
+  <rect x="520" y="40" width="140" height="56" rx="8" fill="#FAC775" stroke="#BA7517" stroke-width="0.5"/>
+  <text x="590" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#633806">④ 库存调到实盘</text>
+  <text x="590" y="80" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#BA7517">自动 · 盈亏全程留痕</text>
+</svg>
+</div>
+<ul>
+  <li>提交后数字就<b>锁定</b>了——老板看到的就是仓管交的那份，中途不能再改；要改只能老板先退回。</li>
+  <li>审批必须明确选「通过」或「退回」，不存在点错了就糊弄过去的情况。</li>
+  <li>盘盈盘亏多少、谁盘的、谁批的，全部可查。</li>
+</ul>
+
+<!-- ============ 数据与看板 ============ -->
+<h2>七、老板在手机和电脑上看到什么</h2>
+<table>
+  <tr><th style="width:150px">看板</th><th>内容</th></tr>
+  <tr><td>库存总值</td><td>每种料多少件 × 平均成本 = 现在仓库里压着多少钱（金额只保留两位小数）</td></tr>
+  <tr><td>库存预警</td><td>哪些料低于预警线（分「偏低 / 告急」两档），每天早上 8:30 系统自动扫描并发消息</td></tr>
+  <tr><td>零库存</td><td>哪些料已经断货</td></tr>
+  <tr><td>今日 / 本月出入库</td><td>今天出了多少单、多少件、值多少钱；入库同理</td></tr>
+  <tr><td>物料排行 / 人员绩效</td><td>电脑后台：哪些料领得最多、每个人经手了多少单</td></tr>
+</table>
+<div class="box">
+  <b>同一个数字，四个地方完全一致：</b>手机看板、电脑看板、物料列表、仓库汇总里的预警数，
+  全系统用同一把尺子量，不会出现「两个页面对不上」的情况（这一点有自动化测试每轮守护）。
+</div>
+
+<!-- ============ 功能清单 ============ -->
+<h2>八、功能清单（速查表）</h2>
+<h3>微信小程序（干活端）</h3>
+<table>
+  <tr><th style="width:120px">功能</th><th>说明</th></tr>
+  <tr><td>登录</td><td>微信一键登录；首次进入需管理员审核通过才能用</td></tr>
+  <tr><td>首页</td><td>按你的岗位只显示你能用的入口</td></tr>
+  <tr><td>领料出库</td><td>提交 / 撤销 / 确认收货 / 查自己的单</td></tr>
+  <tr><td>入库登记</td><td>仓管开单、确认、改价</td></tr>
+  <tr><td>采购任务</td><td>仓管发单；采购员领取、录入；仓管收料；月底对账</td></tr>
+  <tr><td>库存盘点</td><td>仓管创建、录入；老板审批</td></tr>
+  <tr><td>老板看板</td><td>总值 / 预警 / 零库存 / 趋势 / 全部单据</td></tr>
+  <tr><td>仓管工作台</td><td>待办聚合：待确认、待拣货、待收料一目了然</td></tr>
+  <tr><td>消息中心</td><td>9 类业务通知，点了直接跳到对应单据</td></tr>
+</table>
+
+<h3>电脑后台（管理端）</h3>
+<table>
+  <tr><th style="width:120px">功能</th><th>说明</th></tr>
+  <tr><td>数据看板</td><td>核心指标 + 预警跳转</td></tr>
+  <tr><td>统计报表</td><td>出入库统计、物料排行、人员绩效</td></tr>
+  <tr><td>单据管理</td><td>出库单、入库单、采购任务、盘点单全流程管理</td></tr>
+  <tr><td>主数据</td><td>物料（含 Excel 批量导入）、供应商、仓库</td></tr>
+  <tr><td>用户管理</td><td>审核新人、分配岗位和仓库、禁用、重置密码</td></tr>
+  <tr><td>操作日志</td><td>全量审计：正常操作 + 被拒绝的越权尝试</td></tr>
+  <tr><td>消息中心</td><td>与小程序消息互通</td></tr>
+</table>
+
+<!-- ============ 安全 ============ -->
+<h2>九、账是怎么保准的（三条底线）</h2>
+<ul>
+  <li><b>库存只能两种办法动</b>：入库单 / 盘点调整。物料档案页面上没有「直接改库存」这个口子，
+      接口层面也封死了——这样每一件货的变化都有单据、有责任人。</li>
+  <li><b>每一分钱都能对账</b>：当前库存 = 从第一天到现在所有流水加减的结果，
+      系统每天凌晨 2 点自动自检，对不上会报出来。</li>
+  <li><b>防呆防错</b>：同一张单重复提交不会变成两张（网络卡了连点也不怕）；
+      两个人同时改一笔数据，后提交的人会收到明确提示而不是把别人覆盖掉。</li>
+</ul>
+
+<h2>十、离正式上线还差什么（如实列出）</h2>
+<table>
+  <tr><th style="width:220px">事项</th><th>说明</th></tr>
+  <tr><td>微信真实登录</td><td>代码已支持，待配置微信密钥后启用（目前用测试账号试用）</td></tr>
+  <tr><td>HTTPS + 备案域名</td><td>微信正式版强制要求，提审前必须完成</td></tr>
+  <tr><td>协议主体信息</td><td>用户协议里有 3 处公司信息占位符待填写</td></tr>
+  <tr><td>隐私保护指引</td><td>用到了相册选图功能，需在微信后台补充说明</td></tr>
+</table>
+
+<p class="sub" style="margin-top:24px; text-align:center;">—— 盛龙进销存 · 功能与业务链路说明 · 2026-10 ——</p>
+
+</body>
+</html>

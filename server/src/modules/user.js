@@ -9,23 +9,31 @@ const { operatorOf, isManagement, MANAGEMENT_ROLES, identityOf } = require('../m
 
 // 流程重构 V2（2026-10-03）：原 'in'（入库员）已并入 'storekeeper'（仓管员），
 // 入库相关权限统一收敛到仓管；角色的增删走这里 + admin/src/constants/roles.js 两处同步。
-const VALID_ROLES = ['out', 'purchase', 'storekeeper', 'boss', 'admin']
+const VALID_ROLES = ['out', 'purchase', 'storekeeper', 'boss', 'admin', 'director']
+
+/** 角色数组里是否有「管理员」 */
+function isAdminRole(roles) {
+  return (Array.isArray(roles) ? roles : []).includes('admin')
+}
 
 /**
- * 该用户是否是「系统里最后一个仍在启用状态的管理账号」
+ * 该用户是否是「系统里最后一个仍在启用状态的管理员（admin）」
  *
- * ⚠️ 整改说明（P0-3.11）：原实现只拦「取消自己的 admin 权限」，
- *   boss 不在保护范围 → 老板 `updateRole {roles:["out"]}` 成功后被锁死，
- *   连改回来的接口都 403，只能靠 admin 默认密码才能救。
- *   现在：唯一的管理账号不能被降级、也不能被禁用。
+ * ⚠️ 整改说明（V3 多岗位测试 P0-3）：原实现的查询条件是
+ *   「除了他以外还有没有 admin **或 boss**」，等于把 boss 也算作管理账号。
+ *   后果：「唯一管理员要把自己降级」被判定成「系统里还有 boss，安全」→ 放行，
+ *   降级后系统里再没有任何 admin，而「授予 admin」又要求操作者自己是 admin →
+ *   **死锁，无法自救**。
+ *   boss 拥有的是业务管理权（审单、改账），admin 拥有的是系统管理权（改权限、
+ *   作废已完成单据）。两者不是一回事，不能互相顶替。
+ *   现在：只认 admin，保证系统里永远至少有一个 admin。
  */
-async function isLastActiveManager(user) {
-  if (!user || !isManagement(user.roles)) return false
+async function isLastActiveAdmin(user) {
+  if (!user || !isAdminRole(user.roles)) return false
   const row = await queryOne(
     `SELECT COUNT(*) AS c FROM users
       WHERE status = 'active' AND id <> ?
-        AND (JSON_CONTAINS(COALESCE(roles, JSON_ARRAY()), JSON_QUOTE('admin'))
-          OR JSON_CONTAINS(COALESCE(roles, JSON_ARRAY()), JSON_QUOTE('boss')))`,
+        AND JSON_CONTAINS(COALESCE(roles, JSON_ARRAY()), JSON_QUOTE('admin'))`,
     [user.id]
   )
   return num(row.c) === 0
@@ -34,6 +42,37 @@ async function isLastActiveManager(user) {
 /** 角色数组里是否有管理角色（用于提示语） */
 function roleHasManagement(roles) {
   return MANAGEMENT_ROLES.some((r) => (roles || []).includes(r))
+}
+
+/**
+ * 「管理员」角色的准入规则：只有管理员本人才能授予 admin
+ *
+ * ⚠️ 整改说明（V3 多岗位测试 P0-1）：原先只有 `updateRole` 里有这道判断，
+ *   `create`（后台建号）与 `approve`（审核通过）都没有 → 老板可以直接
+ *   `user.create {roles:["admin"]}` 凭空造一个管理员，或把待审用户审成管理员。
+ *   三个入口共用本函数，避免以后再加入口时又漏掉。
+ * @returns {string|null} 不通过时返回给用户看的提示语
+ */
+function assertCanGrantAdmin(ctx, roles) {
+  if (!isAdminRole(roles)) return null
+  if (isAdminRole(ctx.user && ctx.user.roles)) return null
+  return '只有「管理员」才能授予「管理员」角色，请联系系统管理员操作'
+}
+
+/**
+ * 「管理员」角色的准出规则：只有管理员本人才能剥夺别人的 admin
+ *
+ * ⚠️ 整改说明（V3 多岗位测试 P0-2）：原先只拦「授予」，不拦「剥夺」，
+ *   于是老板（boss）可以把 admin 的角色改成 ["out"]，或直接把他禁用。
+ *   管理员承载的是「作废已完成单据」这类不可逆操作，不能由业务角色随手摘掉。
+ * @returns {string|null} 不通过时返回给用户看的提示语
+ */
+function assertCanRevokeAdmin(ctx, targetUser, nextRoles) {
+  const targetIsAdmin = isAdminRole(targetUser && targetUser.roles)
+  if (!targetIsAdmin) return null
+  if (isAdminRole(nextRoles)) return null
+  if (isAdminRole(ctx.user && ctx.user.roles)) return null
+  return '只有「管理员」才能取消他人的「管理员」角色，请联系系统管理员操作'
 }
 
 async function writeOpLog(p) {
@@ -118,6 +157,10 @@ async function approve(ctx, data = {}) {
   if (!id) return fail(400, '用户 ID 无效')
   if (!roles.length) return fail(400, '请至少分配一个角色')
 
+  // 「审核通过」也是一个授予角色的入口，必须与 updateRole 同一套规则
+  const denyApprove = assertCanGrantAdmin(ctx, roles)
+  if (denyApprove) return fail(403, denyApprove)
+
   const user = await queryOne('SELECT * FROM users WHERE id = ?', [id])
   if (!user) return fail(404, '用户不存在')
 
@@ -152,10 +195,21 @@ async function updateRole(ctx, data = {}) {
   const user = await queryOne('SELECT * FROM users WHERE id = ?', [id])
   if (!user) return fail(404, '用户不存在')
 
-  // ---------- 防止把自己（或系统最后一个管理账号）锁在门外 ----------
+  // ---------- 角色授予/剥夺边界 ----------
+  // 老板和仓管都能进「权限管理」页面，但「管理员」能管用户、能作废已完成的单据，
+  // 如果谁都能把别人（或自己）设成管理员、或者把管理员摘掉，越权就绕过去了。
+  // 三个入口（create / approve / updateRole）共用同一套规则，见文件上方两个 assert 函数。
   const nextRoles = roles || (Array.isArray(user.roles) ? user.roles : [])
 
-  // 1) 不允许自己把自己从管理角色降级为普通员工
+  // 1) 授予方向：不能授予自己没有的高阶角色
+  const denyGrant = assertCanGrantAdmin(ctx, roles)
+  if (denyGrant) return fail(403, denyGrant)
+
+  // 2) 剥夺方向：不能摘掉别人的管理员角色（原先只堵了授予、没堵剥夺）
+  const denyRevoke = assertCanRevokeAdmin(ctx, user, nextRoles)
+  if (denyRevoke) return fail(403, denyRevoke)
+
+  // 3) 不允许自己把自己从管理角色降级为普通员工
   if (id === ctx.user.id && isManagement(user.roles) && !roleHasManagement(nextRoles)) {
     return fail(
       400,
@@ -164,12 +218,13 @@ async function updateRole(ctx, data = {}) {
     )
   }
 
-  // 2) 不允许摘掉系统里最后一个管理账号的权限
-  if (!roleHasManagement(nextRoles) && (await isLastActiveManager(user))) {
+  // 4) 保证系统里永远至少有一个管理员（否则「作废已完成单据」等操作将无人可做，
+  //    且由于「授予 admin 需要自己是 admin」，降级后无法自救）
+  if (!isAdminRole(nextRoles) && (await isLastActiveAdmin(user))) {
     return fail(
       400,
       `不能再降低「${user.real_name || user.username}」的权限：` +
-      `他/她当前是系统里唯一的管理账号，降级后将没有任何人能审批单据、调整账目和管理用户`
+      `他/她当前是系统里唯一的「管理员」，降级后将没有任何人能调整权限、作废单据和管理用户`
     )
   }
 
@@ -191,7 +246,9 @@ async function updateRole(ctx, data = {}) {
   const operator = operatorOf(ctx.user)
   const oldRoles = Array.isArray(user.roles) ? user.roles.join('、') : ''
   await writeOpLog({
-    openid: operator.openid, userName: operator.name, action: 'user_update_role', targetId: id,
+    openid: operator.openid, userName: operator.name,
+    role: (ctx.user.roles || []).join(','),
+    action: 'user_update_role', targetId: id,
     detail:
       `修改用户「${user.real_name || user.nickname}」角色：${oldRoles || '（空）'} → ${(roles || []).join('、')}` +
       (warehouseIds ? `；可管仓库：${warehouseIds.join('、')}` : ''),
@@ -213,12 +270,17 @@ async function setStatus(ctx, data = {}, status) {
     return fail(400, `不能${status === 'disabled' ? '禁用' : '启用'}自己的账号`)
   }
 
-  // 不允许禁用系统里最后一个管理账号（否则审批/改账全停摆）
-  if (status === 'disabled' && (await isLastActiveManager(user))) {
+  // 只有管理员能禁用管理员（否则老板一句话就能把系统管理员关掉）
+  if (status === 'disabled' && isAdminRole(user.roles) && !isAdminRole(ctx.user.roles)) {
+    return fail(403, '只有「管理员」才能禁用管理员账号，请联系系统管理员操作')
+  }
+
+  // 不允许禁用系统里最后一个管理员（否则审批/改账/授权全停摆，且无法自救）
+  if (status === 'disabled' && (await isLastActiveAdmin(user))) {
     return fail(
       400,
-      `不能禁用「${user.real_name || user.username}」：他/她当前是系统里唯一的管理账号，` +
-      `禁用后将没有任何人能审批单据、调整账目和管理用户`
+      `不能禁用「${user.real_name || user.username}」：他/她当前是系统里唯一的「管理员」，` +
+      `禁用后将没有任何人能调整权限、作废单据和管理用户`
     )
   }
 
@@ -227,6 +289,7 @@ async function setStatus(ctx, data = {}, status) {
   const operator = operatorOf(ctx.user)
   await writeOpLog({
     openid: operator.openid, userName: operator.name,
+    role: (ctx.user.roles || []).join(','),
     action: status === 'disabled' ? 'user_disable' : 'user_enable', targetId: id,
     detail: `${status === 'disabled' ? '禁用' : '启用'}用户「${user.real_name || user.nickname || user.username}」`,
     ip: ctx.ip
@@ -252,6 +315,10 @@ async function create(ctx, data = {}) {
   if (!realName || !String(realName).trim()) return fail(400, '真实姓名不能为空')
   if (!roles.length) return fail(400, '请至少分配一个角色')
 
+  // 建号也是授予角色的入口：非管理员不能在这里造出管理员账号（原先漏了这道校验）
+  const denyGrant = assertCanGrantAdmin(ctx, roles)
+  if (denyGrant) return fail(403, denyGrant)
+
   const cleanUsername = String(username).trim()
   const dup = await queryOne('SELECT id FROM users WHERE username = ?', [cleanUsername])
   if (dup) return fail(409, '该登录账号已存在')
@@ -269,7 +336,9 @@ async function create(ctx, data = {}) {
 
   const operator = operatorOf(ctx.user)
   await writeOpLog({
-    openid: operator.openid, userName: operator.name, action: 'user_create', targetId: res.insertId,
+    openid: operator.openid, userName: operator.name,
+    role: (ctx.user.roles || []).join(','),
+    action: 'user_create', targetId: res.insertId,
     detail: `创建后台账号「${cleanUsername}」（${realName}），角色：${roles.join('、')}`, ip: ctx.ip
   })
 
@@ -292,7 +361,9 @@ async function resetPassword(ctx, data = {}) {
 
   const operator = operatorOf(ctx.user)
   await writeOpLog({
-    openid: operator.openid, userName: operator.name, action: 'user_reset_password', targetId: id,
+    openid: operator.openid, userName: operator.name,
+    role: (ctx.user.roles || []).join(','),
+    action: 'user_reset_password', targetId: id,
     detail: `重置用户「${user.real_name || user.nickname || user.username}」的密码`, ip: ctx.ip
   })
 
@@ -328,6 +399,21 @@ async function update(ctx, data = {}) {
 
   params.push(id)
   await execute(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params)
+
+  // 主数据改动必须留痕（V3 测试 P1-9：原先改用户资料完全不写日志，出了事查不到人）
+  const operator = operatorOf(ctx.user)
+  const changedFields = updates.map((u) => u.split(' = ')[0]).join('、')
+  await writeOpLog({
+    openid: operator.openid, userName: operator.name,
+    role: (ctx.user.roles || []).join(','),
+    action: 'user_update', targetId: id,
+    detail:
+      `修改用户资料（${changedFields}）` +
+      (realName !== undefined ? `，姓名改为「${realName}」` : '') +
+      (username !== undefined ? `，账号改为「${username}」` : '') +
+      (phone !== undefined ? '，手机号已更新' : ''),
+    ip: ctx.ip
+  })
 
   return ok(null, '资料已更新')
 }
@@ -392,25 +478,77 @@ async function logs(ctx, data = {}) {
   })
 }
 
+/**
+ * 盘点人员候选（只回最小字段）
+ *
+ * ⚠️ 2026-10-09 新增（第二批）：仓管 / 厂长要在后台「创建盘点」，
+ *   那个页面原来靠 `user.list` 拉人——而 `user.list` 只给 admin/boss，
+ *   于是仓管一进后台建盘点，人员下拉永远空的（接口 403，页面还只是 console.warn）。
+ *   这里单开一个「只回 id + 姓名 + 角色」的窄接口，让盘点发起人也能选到人，
+ *   既补上功能，也不把手机号之类的员工隐私铺开。
+ *
+ * 入参：{ keyword, warehouse_id }
+ * 返回：{ list: [{ _id, name, roles }] }
+ */
+async function assignees(ctx, data = {}) {
+  const { keyword } = data
+  const where = ["status = 'active'", 'openid IS NOT NULL', "openid <> ''"]
+  const params = []
+
+  // 只有「小程序用户」才有 openid，也只有他们能当盘点执行人（后台账号进不了小程序）
+  if (keyword && String(keyword).trim()) {
+    const kw = `%${String(keyword).trim()}%`
+    where.push('(real_name LIKE ? OR nickname LIKE ?)')
+    params.push(kw, kw)
+  }
+
+  const rows = await query(
+    `SELECT id, real_name, nickname, roles, openid
+       FROM users
+      WHERE ${where.join(' AND ')}
+      ORDER BY id DESC
+      LIMIT 500`,
+    params
+  )
+
+  return ok({
+    list: rows.map((r) => ({
+      _id: r.id,
+      name: r.real_name || r.nickname || `用户${r.id}`,
+      // openid 是 check.create 的 assignee_openids 要的值，必须给；
+      // 但手机号 / 账号 / 密码哈希这类字段**一律不返回**（这个接口给的是仓管和厂长）
+      openid: r.openid,
+      roles: toApi({ roles: r.roles }).roles || []
+    }))
+  })
+}
+
 module.exports = {
   name: 'user',
   publicActions: [],
   roleRules: {
+    // ⚠️ 2026-10-09 用户要求「老板彻底只读」：
+    //   只保留**查看**类（列表/详情/待审数/审计日志），
+    //   审批与账号写入（approve/updateRole/disable/enable/create/update/resetPassword）全部收回 boss，
+    //   员工账号管理归 管理员。
     list: ['boss', 'admin'],
     detail: ['boss', 'admin'],
-    approve: ['boss', 'admin'],
-    updateRole: ['boss', 'admin'],
-    disable: ['boss', 'admin'],
-    enable: ['boss', 'admin'],
-    create: ['boss', 'admin'],
-    update: ['boss', 'admin'],
-    resetPassword: ['boss', 'admin'],
+    approve: ['admin'],
+    updateRole: ['admin'],
+    disable: ['admin'],
+    enable: ['admin'],
+    create: ['admin'],
+    update: ['admin'],
+    resetPassword: ['admin'],
     pendingCount: ['boss', 'admin'],
     // 审计日志：老板/管理员可查全量
-    logs: ['boss', 'admin']
+    logs: ['boss', 'admin'],
+    // 盘点人员候选：盘点发起人（仓管/厂长）也要能选人，故一并放行；
+    // 返回体只有 id + 姓名 + 角色，不含手机号等隐私字段
+    assignees: ['storekeeper', 'director', 'boss', 'admin']
   },
   actions: {
-    list, detail, approve, updateRole, disable, enable, create, update, resetPassword, pendingCount, logs
+    list, detail, approve, updateRole, disable, enable, create, update, resetPassword, pendingCount, logs, assignees
   },
   writeOpLog
 }

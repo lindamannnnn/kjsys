@@ -92,6 +92,23 @@ async function removeFile(ctx, data = {}) {
 module.exports = {
   name: 'upload',
   publicActions: [],
-  roleRules: {},
+  /*
+   * ⚠️ 2026-10-09（第二批）：这里原来是空对象 —— 空 roleRules = **任何登录用户**都能传文件，
+   *   包括 AUTHZ-01 里那些「扫码自动建档、状态 pending、一个角色都没有」的账号。
+   *   文件落盘后是 `/uploads/...` 公开静态地址（app.js 里 express.static），
+   *   等于给了一个匿名可写的图床。现在按「谁真的会上传」收敛：
+   *     out        → 报废单要传照片 + 原因（pages/out/scrap.vue）
+   *     purchase   → 采购录入传票据/实物照（pages/purchase/task-detail.vue）
+   *     storekeeper/director/admin → 物料档案照片、入库照片
+   *   老板（boss）是只读角色，没有任何上传入口，故不放行。
+   *
+   *   注意：这只堵住 upload 这一个口子，AUTHZ-01（pending 账号能读 8 个 list 接口）
+   *   的根治仍在 app.js 加 pending 拦截，别以为改完这里就没事了。
+   */
+  roleRules: {
+    upload: ['out', 'purchase', 'storekeeper', 'director', 'admin'],
+    // 删除已上传文件：只给能维护物料档案的角色（目前前端没有入口，先按最小面给）
+    delete: ['storekeeper', 'director', 'admin']
+  },
   actions: { upload, delete: removeFile }
 }

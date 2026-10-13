@@ -31,7 +31,7 @@
       <template #header>
         <div class="card-header">
           <span>用户列表</span>
-          <el-button type="primary" size="small" @click="handleAdd">
+          <el-button v-if="isAdmin" type="primary" size="small" @click="handleAdd">
             <el-icon><Plus /></el-icon>新增用户
           </el-button>
         </div>
@@ -89,27 +89,31 @@
         </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'pending'" type="success" size="small" @click="handleApprove(row)">
-              审核
-            </el-button>
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" @click="handleResetPassword(row)">重置密码</el-button>
-            <el-button
-              v-if="row.status === 'active'"
-              type="danger"
-              size="small"
-              @click="handleDisable(row)"
-            >
-              禁用
-            </el-button>
-            <el-button
-              v-else-if="row.status === 'disabled'"
-              type="success"
-              size="small"
-              @click="handleEnable(row)"
-            >
-              启用
-            </el-button>
+            <!-- 全部写操作都归管理员（老板只读）；非管理员看到一句说明，避免"操作列是空的" -->
+            <template v-if="isAdmin">
+              <el-button v-if="row.status === 'pending'" type="success" size="small" @click="handleApprove(row)">
+                审核
+              </el-button>
+              <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-button size="small" @click="handleResetPassword(row)">重置密码</el-button>
+              <el-button
+                v-if="row.status === 'active'"
+                type="danger"
+                size="small"
+                @click="handleDisable(row)"
+              >
+                禁用
+              </el-button>
+              <el-button
+                v-else-if="row.status === 'disabled'"
+                type="success"
+                size="small"
+                @click="handleEnable(row)"
+              >
+                启用
+              </el-button>
+            </template>
+            <span v-else class="muted-text">仅查看</span>
           </template>
         </el-table-column>
       </el-table>
@@ -194,12 +198,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { userApi, warehouseApi, exportApi } from '@/api'
 import { ROLES, STATUS_TEXT, STATUS_TAG, roleLabel, roleTag } from '@/constants/roles'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+
+/**
+ * 本页对老板是**只读**：老板能看员工名单，但增删改（含重置密码）全部归管理员。
+ * ⚠️ 原来这些按钮对谁都可见 —— 老板点「新增用户」「重置密码」都是 403。
+ */
+const isAdmin = computed(() => (userStore.roles || []).includes('admin'))
 
 const loading = ref(false)
 const submitting = ref(false)

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>盛龙进销存 · 功能验收清单</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6f8; color: #1a1a2e; line-height: 1.6;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+
+  /* 顶部 */
+  .head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  h1 { font-size: 22px; }
+  .head .sub { color: #777; font-size: 13px; margin-top: 4px; }
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    border: 1px solid #d5dae3; background: #fff; border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; cursor: pointer; color: #333;
+  }
+  .btn:hover { background: #f0f3f7; }
+  .btn.danger { color: #c0392b; border-color: #f0c4bd; }
+
+  /* 总进度 */
+  .total-card {
+    background: #fff; border-radius: 12px; padding: 16px 20px; margin: 18px 0 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); position: sticky; top: 8px; z-index: 10;
+  }
+  .bar { height: 10px; background: #eef1f5; border-radius: 6px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; background: #0B4F95; border-radius: 6px; transition: width .25s; }
+  .total-num { font-size: 13px; color: #555; }
+  .total-num b { font-size: 18px; color: #0B4F95; }
+
+  /* 分组 */
+  .group { margin-bottom: 18px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+  .group-head {
+    display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; user-select: none;
+  }
+  .group-head:hover { background: #fafbfd; }
+  .group-head h2 { font-size: 15px; flex: 1; }
+  .group-head .cnt { font-size: 12px; color: #888; }
+  .group-head .cnt.done { color: #0F7A3D; font-weight: 600; }
+  .group-head .fold { color: #bbb; font-size: 12px; transition: transform .2s; }
+  .group.open .group-head .fold { transform: rotate(90deg); }
+  .group-body { display: none; border-top: 1px solid #f0f2f5; }
+  .group.open .group-body { display: block; }
+
+  .item {
+    display: flex; gap: 12px; padding: 12px 18px; cursor: pointer; align-items: flex-start;
+    border-bottom: 1px solid #f6f7f9;
+  }
+  .item:last-child { border-bottom: none; }
+  .item:hover { background: #fafbfd; }
+  .item input { display: none; }
+  .cbx {
+    width: 20px; height: 20px; border: 2px solid #c8d0db; border-radius: 6px; flex-shrink: 0;
+    margin-top: 2px; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #fff; transition: all .15s;
+  }
+  .item.checked .cbx { background: #0F7A3D; border-color: #0F7A3D; }
+  .item.checked .cbx::after { content: "✓"; }
+  .item .txt { flex: 1; }
+  .item .act { font-size: 14px; }
+  .item.checked .act { color: #999; text-decoration: line-through; }
+  .item .exp { font-size: 12.5px; color: #888; margin-top: 2px; }
+  .item.checked .exp { color: #bbb; }
+
+  .note { font-size: 12.5px; color: #888; padding: 8px 18px 14px; }
+  .footer-tip { text-align: center; color: #aaa; font-size: 12px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>盛龙进销存 · 功能验收清单</h1>
+      <div class="sub">点一项勾一项，进度自动存在本机浏览器，关了重开不丢。</div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="setAll(true)">全部勾上</button>
+      <button class="btn danger" onclick="if(confirm('清空所有勾选？')) setAll(false)">清空重来</button>
+    </div>
+  </div>
+
+  <div class="total-card">
+    <div class="total-num">总进度：<b id="doneNum">0</b> / <span id="allNum">0</span> 项（<span id="pct">0%</span>）</div>
+    <div class="bar"><i id="barFill" style="width:0%"></i></div>
+  </div>
+
+  <div id="groups"></div>
+
+  <div class="footer-tip">盛龙进销存系统 · 验收清单 · 数据只存在你自己的浏览器里</div>
+</div>
+
+<script>
+/* ============ 清单数据（与 TEST-RUNBOOK.md 对应） ============ */
+const GROUPS = [
+  { name: '登录与身份（任意身份）', items: [
+    ['全新进入小程序', '首页显示系统介绍 + 员工登录入口（未登录可浏览）'],
+    ['登录页点测试身份', '一键登录，自动跳到该岗位工作台'],
+    ['我的 → 换测试身份', '确认后跳到新岗位首页'],
+    ['我的 → 退出登录', '直接到身份选择页，点一个身份即换岗位'],
+    ['协议页', '《用户服务协议》《隐私政策》都能打开'],
+    ['微信一键登录不勾协议', '提示先阅读并同意，不放行']
+  ]},
+  { name: '领料员', items: [
+    ['首页入口', '只显示领料相关入口'],
+    ['提交领料单', '选物料 → 底部表单填数量/类型/用途 → 成功出单号'],
+    ['数量填 0 / 负数 / 小数', '被拦并提示'],
+    ['数量超库存（库存 10 填 11）', '提示库存不足'],
+    ['连点提交按钮两下', '只产生一张单'],
+    ['数量 2 点「-」', '变 1，项保留'],
+    ['数量 1 点「-」', '该项被移除，提示「已移除」'],
+    ['我的记录 → 详情', '待确认单有「撤销」按钮'],
+    ['撤销待确认单', '状态变已作废'],
+    ['仓管拣货完成后', '出现「确认收货」，撤销消失'],
+    ['确认收货', '库存此刻才减少'],
+    ['重复点确认收货', '提示已收过，不重复扣'],
+    ['消息中心', '拣货完成收到通知，点了跳单据']
+  ]},
+  { name: '仓管员', items: [
+    ['工作台待办数字', '待确认/待拣货/待收货与实际一致'],
+    ['确认领料单', '状态变待拣货'],
+    ['拣货完成', '状态变待收货，领料员收到消息'],
+    ['驳回领料单（填原因）', '状态已驳回，对方收到消息'],
+    ['入库登记提交', '填数量/单价/供应商出单；不填供应商=其他入库'],
+    ['搜索不存在的物料', '空态出现「＋就地新建」按钮'],
+    ['就地新建物料', '名称预填，选大类，建完自动选中直接入'],
+    ['入库单改价', '当天本人可改；单价填 0 被拦'],
+    ['取消未确认入库单', '作废，库存不变'],
+    ['已确认入库单', '没有取消入口（锁单）'],
+    ['发起采购并指定采购员', '采购员收到消息'],
+    ['收货入库 → 收料清单', '任务明细已预填数量单价'],
+    ['收料清单搜已有物料点选', '加入清单可填数量单价'],
+    ['收料清单＋新增物料对象', '就地建档，进清单带「新物料」标记'],
+    ['新物料不填单价', '被拦'],
+    ['确认收料入库', '生成入库单号，库存增加，采购员收回执'],
+    ['创建盘点（选仓+范围）', '全盘有确认提示'],
+    ['盘点录入提交', '待审核、数字锁定、老板收到消息'],
+    ['取消盘点中的单', '状态已取消'],
+    ['本仓库存 / 全部流水', '查询、切换仓正常']
+  ]},
+  { name: '采购员', items: [
+    ['采购任务列表', '看到待领取任务'],
+    ['领取任务', '变采购中，别人不能再领'],
+    ['录入单价+方式+单号+照片', '可提交；单价留空被拦'],
+    ['被退回后重新录入', '显示退回原因，可再提交'],
+    ['月底对账', '出库/库存流水只读可查'],
+    ['尝试仓管功能', '无入口，直接访问也被拦']
+  ]},
+  { name: '老板', items: [
+    ['老板看板', '物料 1912 / 库存 19120 / 预警 / 零库存，与后台一致'],
+    ['预警明细', '严重程度分级，与后台数字一致'],
+    ['全部单据', '可查询可筛选'],
+    ['盘点审批通过', '库存调到实盘数'],
+    ['盘点审批退回', '回到盘点中'],
+    ['驳回出库单', '已驳回，库存不受影响'],
+    ['趋势页', '图表正常'],
+    ['消息点击跳转', '盘点待审通知跳到对应单']
+  ]},
+  { name: '通用', items: [
+    ['消息全部已读', '未读数归零'],
+    ['我的 → 最近操作记录', '显示刚做的操作'],
+    ['断网提交', '明确报错；恢复后重试不产生第二张单'],
+    ['切换身份回首页', '入口和红点按新身份变化']
+  ]},
+  { name: '后台（电脑端）', items: [
+    ['登录', '错误密码提示；正确进看板'],
+    ['数据看板', '与小程序老板看板一致，可跳预警/零库存'],
+    ['出入库统计', '换时间段数字会动'],
+    ['物料排行 / 人员绩效', '有数据可排序'],
+    ['配件仓/成品仓物料', '搜索筛选分页正常'],
+    ['编辑物料', '可改名称预警线；没有直改库存的口子'],
+    ['批量导入', '模板→上传→预览→导入'],
+    ['出库单管理', '四态筛选，操作与小程序同步'],
+    ['入库单管理', '确认/作废/改价留痕'],
+    ['采购任务', '全状态列表、可取消'],
+    ['盘点管理', '创建 + 审批（通过/退回）'],
+    ['消息中心', '与小程序互通'],
+    ['用户管理：新建/禁用/重置密码', '新建能登录；禁用即拒登；重置后首次强制改密'],
+    ['权限门', '授管理员成功；停用唯一管理员被拦'],
+    ['角色管理', '说明页正常'],
+    ['操作日志', '所有操作 + 越权尝试都有记录'],
+    ['系统设置 / 修改密码', '保存生效；旧密码失效新密码可登录']
+  ]},
+  { name: '误操作与边界', items: [
+    ['所有提交按钮连点 3 下', '只产生一条记录'],
+    ['输入框填文字/表情/超长', '被拦或截断，不白屏'],
+    ['快速滑动点最后一项', '底部浮层不遮挡'],
+    ['浮层打开切后台再回来', '已填内容不丢'],
+    ['小屏（iPhone SE）', '面板不超屏、按钮可点']
+  ]}
+];
+
+/* ============ 渲染与存储 ============ */
+const KEY = 'sl_checklist_v1';
+const state = JSON.parse(localStorage.getItem(KEY) || '{}');
+const groupsEl = document.getElementById('groups');
+
+GROUPS.forEach((g, gi) => {
+  const gEl = document.createElement('div');
+  gEl.className = 'group' + (gi === 0 ? ' open' : '');
+  gEl.innerHTML = `
+    <div class="group-head">
+      <h2>${g.name}</h2>
+      <span class="cnt" data-cnt></span>
+      <span class="fold">▶</span>
+    </div>
+    <div class="group-body"></div>`;
+  const body = gEl.querySelector('.group-body');
+  g.items.forEach(([act, exp], ii) => {
+    const id = `g${gi}i${ii}`;
+    const item = document.createElement('div');
+    item.className = 'item' + (state[id] ? ' checked' : '');
+    item.innerHTML = `
+      <div class="cbx"></div>
+      <div class="txt">
+        <div class="act">${act}</div>
+        <div class="exp">预期：${exp}</div>
+      </div>`;
+    item.onclick = () => {
+      state[id] = !state[id];
+      item.classList.toggle('checked', !!state[id]);
+      save(); refresh();
+    };
+    body.appendChild(item);
+  });
+  gEl.querySelector('.group-head').onclick = () => gEl.classList.toggle('open');
+  groupsEl.appendChild(gEl);
+});
+
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+
+function refresh() {
+  let done = 0, all = 0;
+  document.querySelectorAll('.group').forEach((gEl, gi) => {
+    const total = GROUPS[gi].items.length;
+    const d = GROUPS[gi].items.filter((_, ii) => state[`g${gi}i${ii}`]).length;
+    const cnt = gEl.querySelector('[data-cnt]');
+    cnt.textContent = `${d}/${total}`;
+    cnt.classList.toggle('done', d === total && total > 0);
+    done += d; all += total;
+  });
+  document.getElementById('doneNum').textContent = done;
+  document.getElementById('allNum').textContent = all;
+  const pct = all ? Math.round(done / all * 100) : 0;
+  document.getElementById('pct').textContent = pct + '%';
+  document.getElementById('barFill').style.width = pct + '%';
+}
+
+function setAll(v) {
+  GROUPS.forEach((g, gi) => g.items.forEach((_, ii) => state[`g${gi}i${ii}`] = v));
+  document.querySelectorAll('.item').forEach(el => el.classList.toggle('checked', v));
+  save(); refresh();
+}
+
+refresh();
+</script>
+</body>
+</html>

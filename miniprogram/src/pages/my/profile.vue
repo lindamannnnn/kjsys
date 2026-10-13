@@ -62,29 +62,27 @@
       <button class="btn-save" @click="onSaveProfile">保存资料</button>
     </view>
 
-    <!-- 功能列表 -->
+    <!-- 功能列表
+         ⚠️ 2026-10-09 改：原先所有角色看到同一份菜单 ——
+           · 「个人信息」点进去还是当前页（自己跳自己）
+           · 「我的出库/入库记录」对老板、仓管其实是全部单据，标签名不副实
+           · 「盘点任务」对没有权限的领料员/采购员也显示，进去点提交才报 403
+         现在按角色出菜单，并按是否「纯领料员」决定用不用「我的」前缀。 -->
     <view class="menu-list">
-      <view class="menu-item" @click="goPage('/pages/my/profile')">
-        <text class="menu-icon">👤</text>
-        <text class="menu-text">个人信息</text>
+      <view
+        v-for="m in menuItems"
+        :key="m.key"
+        class="menu-item"
+        @click="goPage(m.url)"
+      >
+        <text class="menu-icon">{{ m.icon }}</text>
+        <text class="menu-text">{{ m.label }}</text>
         <text class="menu-arrow">></text>
       </view>
 
-      <view class="menu-item" @click="goPage('/pages/out/history')">
-        <text class="menu-icon">📋</text>
-        <text class="menu-text">我的出库记录</text>
-        <text class="menu-arrow">></text>
-      </view>
-
-      <view class="menu-item" @click="goPage('/pages/in/history')">
-        <text class="menu-icon">📥</text>
-        <text class="menu-text">我的入库记录</text>
-        <text class="menu-arrow">></text>
-      </view>
-
-      <view class="menu-item" @click="goPage('/pages/check/list')">
-        <text class="menu-icon">📊</text>
-        <text class="menu-text">盘点任务</text>
+      <view class="menu-item" @click="goPage('/pages/my/password')">
+        <text class="menu-icon">🔒</text>
+        <text class="menu-text">修改密码</text>
         <text class="menu-arrow">></text>
       </view>
 
@@ -185,9 +183,41 @@ const roleText = computed(() => {
     'purchase': '采购员',
     'storekeeper': '仓管员',
     'boss': '老板',
+    'director': '厂长',
     'admin': '管理员'
   }
   return roles.value.map(r => roleMap[r] || r).join(' / ')
+})
+
+/**
+ * 功能菜单（按角色出）
+ * roles 必须与后端的 roleRules 对齐 —— 给了入口却点进去 403，比不给还糟。
+ *   out/history  → outbound.list（无 roleRules，登录即可读）
+ *   in/history   → inbound.list
+ *   ledger       → stats.stockFlow（boss/admin/storekeeper/purchase/director）
+ *   check/list   → check.list（可见性：storekeeper/director/admin 看全仓，创建人看自己）
+ *   warning      → stats.warning（boss/admin/storekeeper/purchase/director）
+ */
+const MENU = [
+  { key: 'out', icon: '📋', label: '出库记录', myLabel: '我的出库记录', url: '/pages/out/history', roles: ['out', 'storekeeper', 'purchase', 'boss', 'director', 'admin'] },
+  { key: 'in', icon: '📥', label: '入库记录', myLabel: '我的入库记录', url: '/pages/in/history', roles: ['storekeeper', 'purchase', 'boss', 'director', 'admin'] },
+  { key: 'ledger', icon: '📒', label: '库存流水', url: '/pages/purchase/ledger', roles: ['storekeeper', 'purchase', 'boss', 'director', 'admin'] },
+  { key: 'warning', icon: '⚠️', label: '库存预警', url: '/pages/boss/warning', roles: ['storekeeper', 'purchase', 'boss', 'director', 'admin'] },
+  { key: 'check', icon: '📊', label: '盘点任务', url: '/pages/check/list', roles: ['storekeeper', 'director', 'admin'] }
+]
+
+const menuItems = computed(() => {
+  const mine = roles.value || []
+  // 纯领料员看到的是「我的」记录（数据范围本就只有自己），其它角色看到的是公共列表
+  const pureOut = mine.length === 1 && mine[0] === 'out'
+  return MENU
+    .filter(m => m.roles.some(r => mine.includes(r)))
+    .map(m => ({
+      key: m.key,
+      icon: m.icon,
+      url: m.url,
+      label: pureOut && m.myLabel ? m.myLabel : m.label
+    }))
 })
 
 function actionText(action) {
@@ -265,13 +295,15 @@ async function loadLogs() {
 }
 
 function onLogout() {
+  // 开发环境：退出后直接去「身份选择」页（登录页的开发身份区），点一下换岗位，
+  // 不走微信登录那套流程；生产环境行为不变（回首页 → 未登录会去登录页）
   uni.showModal({
     title: '确认退出',
-    content: '退出后需要重新登录',
+    content: DEV_MODE ? '开发环境：退出后直接到身份选择页，点一个身份即换岗位' : '退出后需要重新登录',
     success: (res) => {
       if (res.confirm) {
         userStore.logout()
-        uni.reLaunch({ url: '/pages/index/index' })
+        uni.reLaunch({ url: DEV_MODE ? '/pages/login/login' : '/pages/index/index' })
       }
     }
   })

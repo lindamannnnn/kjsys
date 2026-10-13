@@ -33,10 +33,19 @@ function resolveDevLogin(mode) {
 export default defineConfig(({ mode }) => {
   const devLogin = resolveDevLogin(mode)
 
+  // 接口地址注入（编译期常量，注入到 utils/cloud.js 的 API_BASE）
+  //   - H5 构建：只用于本地浏览器验证 → 默认指向本地服务 http://127.0.0.1:3000，
+  //     防止本地 UI 验证打到生产服务器（119.91.206.235）
+  //   - 小程序构建 / 其他情况：注入空串 → 代码里回退到生产地址，行为与原来完全一致
+  //   - 手动覆盖：API_BASE=http://192.168.x.x:3000 npm run build:h5
+  const apiBase = process.env.API_BASE
+    || (process.env.UNI_PLATFORM === 'h5' ? 'http://127.0.0.1:3000' : '')
+
   return {
     plugins: [uni()],
     define: {
-      __DEV_LOGIN__: JSON.stringify(devLogin)
+      __DEV_LOGIN__: JSON.stringify(devLogin),
+      __API_BASE__: JSON.stringify(apiBase)
     }
   }
 })

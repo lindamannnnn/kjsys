@@ -22,7 +22,11 @@ const MSG_TYPE = {
   OUTBOUND_RECEIVED: 'outbound_received',   // 领料员确认收货 → 回执给仓管（可选）
   PURCHASE_TASK_ASSIGNED: 'purchase_task_assigned', // 仓管指派任务 → 通知该采购员
   PURCHASE_TASK_OPEN: 'purchase_task_open',         // 仓管发布任务 → 通知全体采购员
-  PURCHASE_DONE: 'purchase_done'                    // 采购录入完成 → 通知仓管收料
+  PURCHASE_DONE: 'purchase_done',                   // 采购录入完成 → 通知仓管收料
+  PURCHASE_RECEIVED: 'purchase_received',           // 仓管收料入库 → 通知采购员
+  CHECK_PENDING_REVIEW: 'check_pending_review',     // 仓管提交盘点结果 → 通知老板/管理员审核
+  CHECK_REJECTED: 'check_rejected',                 // 审核退回重盘     → 通知盘点人（带上退回原因）
+  WARNING_NOTIFY: 'warning_notify'                  // 库存预警通知采购 → 通知采购员/仓管
 }
 
 /** 把角色展开为「启用中」账号的 openid 列表（去重） */
@@ -41,6 +45,34 @@ async function openidsByRoles(roles = [], conn = null) {
         AND openid <> ''
         AND (${conds})`,
     list,
+    conn
+  )
+  return rows.map((r) => r.openid)
+}
+
+/**
+ * 按「角色 + 可管仓库」取 openid（去重）
+ * 用途：通知到真正管这个仓的仓管，而不是全公司所有仓管都收到
+ * （仓库没给或没人匹配时由调用方决定是否回退为全角色广播）
+ * @param {string[]} roles
+ * @param {number}   warehouseId
+ */
+async function openidsByWarehouseRoles(roles = [], warehouseId = null, conn = null) {
+  const list = (roles || []).filter(Boolean)
+  if (!list.length) return []
+  if (!warehouseId) return openidsByRoles(list, conn)
+
+  const conds = list.map(() => 'JSON_CONTAINS(roles, JSON_QUOTE(?))').join(' OR ')
+  const rows = await query(
+    `SELECT openid
+       FROM users
+      WHERE status = 'active'
+        AND openid IS NOT NULL
+        AND openid <> ''
+        AND (${conds})
+        AND JSON_VALID(warehouse_ids)
+        AND JSON_CONTAINS(warehouse_ids, CAST(? AS JSON))`,
+    [...list, String(warehouseId)],
     conn
   )
   return rows.map((r) => r.openid)
@@ -104,4 +136,4 @@ async function pushMessage(opt = {}, conn = null) {
   return targets.length
 }
 
-module.exports = { MSG_TYPE, pushMessage, openidsByRoles }
+module.exports = { MSG_TYPE, pushMessage, openidsByRoles, openidsByWarehouseRoles }

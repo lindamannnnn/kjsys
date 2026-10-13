@@ -119,6 +119,30 @@ export const materialApi = {
   categories: (data) => callFunction('material', 'categories', data)
 }
 
+// 文件上传（照片等，base64 进 upload 模块）
+export const uploadApi = {
+  upload: (data) => callFunction('upload', 'upload', data)
+}
+
+/** 文件 → base64 上传 → 返回可访问 url */
+export async function uploadFile(file, subdir = 'materials') {
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).replace(/^data:[^;]+;base64,/, ''))
+    reader.onerror = () => reject(new Error('读取文件失败'))
+    reader.readAsDataURL(file)
+  })
+  const res = await uploadApi.upload({ filename: file.name, base64, subdir })
+  return (res && res.data && (res.data.fileid || res.data.url)) || ''
+}
+
+/** 把 /uploads/... 相对地址补成完整 url */
+export function fullFileUrl(p) {
+  if (!p) return ''
+  if (/^https?:\/\//.test(p)) return p
+  return API_BASE + p
+}
+
 // 出库
 export const outboundApi = {
   submit: (data) => callFunction('outbound', 'submit', data),
@@ -126,8 +150,12 @@ export const outboundApi = {
   detail: (data) => callFunction('outbound', 'detail', data),
   cancel: (data) => callFunction('outbound', 'cancel', data),
   confirm: (data) => callFunction('outbound', 'confirm', data),
+  // V2 四阶段：确认 → 拣货完成 → 确认收货（收货时才扣库存）
+  pickDone: (data) => callFunction('outbound', 'pickDone', data),
+  receive: (data) => callFunction('outbound', 'receive', data),
   reject: (data) => callFunction('outbound', 'reject', data),
-  pendingCount: () => callFunction('outbound', 'pendingCount')
+  pendingCount: () => callFunction('outbound', 'pendingCount'),
+  pickingCount: () => callFunction('outbound', 'pickingCount')
 }
 
 // 入库
@@ -161,7 +189,10 @@ export const statsApi = {
   stockFlow: (data) => callFunction('stats', 'stockFlow', data),
   materialRank: (data) => callFunction('stats', 'materialRank', data),
   operatorStats: (data) => callFunction('stats', 'operatorStats', data),
-  warehouseSummary: (data) => callFunction('stats', 'warehouseSummary', data)
+  warehouseSummary: (data) => callFunction('stats', 'warehouseSummary', data),
+  // 月结表（2026-10-13）：期初/本月收入/本月发出/期末结存；导出返回 base64 xlsx
+  monthly: (data) => callFunction('stats', 'monthly', data),
+  monthlyExport: (data) => callFunction('stats', 'monthlyExport', data)
 }
 
 // 用户管理
@@ -176,6 +207,9 @@ export const userApi = {
   enable: (data) => callFunction('user', 'enable', data),
   resetPassword: (data) => callFunction('user', 'resetPassword', data),
   pendingCount: () => callFunction('user', 'pendingCount'),
+  // 盘点人员候选（只回 id + 姓名 + 角色）。⚠️ 别改回 list：user.list 只给 admin/boss，
+  // 仓管/厂长在后台建盘点时会拿不到人（403）
+  assignees: (data) => callFunction('user', 'assignees', data),
   // 操作日志（审计用，支持分页/关键词/动作/时间筛选）
   logs: (data) => callFunction('user', 'logs', data)
 }
@@ -193,6 +227,29 @@ export const supplierApi = {
 export const warehouseApi = {
   list: (data) => callFunction('warehouse', 'list', data),
   upsert: (data) => callFunction('warehouse', 'upsert', data)
+}
+
+// 采购任务（P4 采购线：仓管发任务 → 采购员领取并填实际单价 → 仓管收料入库）
+export const purchaseApi = {
+  create: (data) => callFunction('purchase', 'create', data),
+  list: (data) => callFunction('purchase', 'list', data),
+  detail: (data) => callFunction('purchase', 'detail', data),
+  take: (data) => callFunction('purchase', 'take', data),
+  entry: (data) => callFunction('purchase', 'entry', data),
+  receive: (data) => callFunction('purchase', 'receive', data),
+  receiveItem: (data) => callFunction('purchase', 'receiveItem', data),
+  rejectBack: (data) => callFunction('purchase', 'rejectBack', data),
+  cancel: (data) => callFunction('purchase', 'cancel', data),
+  myTodoCount: () => callFunction('purchase', 'myTodoCount'),
+  assignees: () => callFunction('purchase', 'assignees')
+}
+
+// 消息中心（按人投递，已读状态各人独立）
+export const messageApi = {
+  list: (data) => callFunction('message', 'list', data),
+  unreadCount: () => callFunction('message', 'unreadCount'),
+  markRead: (data) => callFunction('message', 'markRead', data),
+  markAllRead: () => callFunction('message', 'markAllRead')
 }
 
 /**
@@ -281,5 +338,7 @@ export default {
   user: userApi,
   supplier: supplierApi,
   warehouse: warehouseApi,
+  purchase: purchaseApi,
+  message: messageApi,
   export: exportApi
 }

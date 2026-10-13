@@ -16,7 +16,7 @@
  *   P0-3.5 改价后不重算加权成本 → 现按「入库金额差额」修正 avg_cost 并写流水留痕
  *   P1-1  确认前看不到物料当前库存 → detail 补 current_stock
  *   P1-3  确认无幂等 → 现条件更新 + 重复确认返回既有结果
- *   P1-11 已确认单据采购员无法纠错 → 老板/管理员可对已确认单改价（必留痕）
+ *   P1-11 已确认单据采购员无法纠错 → 管理员可对已确认单改价（必留痕；2026-10-09 老板只读后仅管理员）
  *   P1-2-06 作废看不出是谁停的 → 现记录 cancel_operator
  *   P0（本轮）作废不回退加权成本 → cancel 改走 restoreForInboundCancel，
  *           按「本批次入库金额」冲回 avg_cost 并写流水留痕
@@ -34,7 +34,7 @@ const {
   lockMaterialsSorted, addForInbound, restoreForInboundCancel, writeLog
 } = require('../services/stock')
 const { nextOrderNo } = require('../services/orderNo')
-const { operatorOf, hasAnyRole, identityOf } = require('../middleware/auth')
+const { operatorOf, hasAnyRole, identityOf, isCostHiddenUser, isPartsWarehouse } = require('../middleware/auth')
 
 async function writeOpLog(conn, p) {
   await execute(
@@ -282,7 +282,7 @@ async function list(ctx, data = {}) {
 
   const cnt = await queryOne(`SELECT COUNT(*) AS total FROM inbound_orders o WHERE ${whereSql}`, params)
   const orders = await query(
-    `SELECT o.*, w.name AS warehouse_name
+    `SELECT o.*, w.name AS warehouse_name, w.code AS warehouse_code
        FROM inbound_orders o
        LEFT JOIN warehouses w ON w.id = o.warehouse_id
       WHERE ${whereSql}
@@ -309,6 +309,19 @@ async function list(ctx, data = {}) {
     }
   }
 
+  // 仓管不看金额（2026-10-10）：**成品仓**入库单的 总价/单价/小计 一律不下发；
+  //   配件仓入库单保留金额 —— 配件是采购来的，仓管收货要对账
+  //   （用户 2026-10-10 明确要求「配件仓入库单价保留」）。
+  // warehouse_code 只用于这里的判定，判定完就删（不下发给任何角色，保持原契约）。
+  const hideCost = isCostHiddenUser(ctx.user)
+  for (const o of orders) {
+    if (hideCost && !isPartsWarehouse(o.warehouse_code)) {
+      delete o.total_price
+      for (const it of o.items || []) { delete it.unit_price; delete it.total_price }
+    }
+    delete o.warehouse_code
+  }
+
   return ok({ list: toApi(orders), total: cnt.total, page, pageSize })
 }
 
@@ -320,7 +333,7 @@ async function detail(ctx, data = {}) {
   if (!id) return fail(400, '单据 ID 无效')
 
   const order = await queryOne(
-    `SELECT o.*, w.name AS warehouse_name
+    `SELECT o.*, w.name AS warehouse_name, w.code AS warehouse_code
        FROM inbound_orders o
        LEFT JOIN warehouses w ON w.id = o.warehouse_id
       WHERE o.id = ?`,
@@ -343,6 +356,13 @@ async function detail(ctx, data = {}) {
   order.items = items
   order.status_text = statusText(order.status)
   order.type_text = typeText('inbound', order.type)
+
+  // 仓管不看金额（2026-10-10）：成品仓入库单的总价/单价/小计不下发；配件仓保留（见 list）
+  if (isCostHiddenUser(ctx.user) && !isPartsWarehouse(order.warehouse_code)) {
+    delete order.total_price
+    for (const it of order.items) { delete it.unit_price; delete it.total_price }
+  }
+  delete order.warehouse_code
 
   return ok(toApi(order))
 }
@@ -378,11 +398,11 @@ async function updatePrice(ctx, data = {}) {
   if (order.status === 'confirmed' && !isManager) {
     return fail(
       403,
-      '该单据已被仓管确认，不能自行改价。为防止账实不符，请让老板或管理员处理（改价会自动重算库存成本并留痕）'
+      '该单据已被仓管确认，不能自行改价。为防止账实不符，请联系管理员处理（改价会自动重算库存成本并留痕）'
     )
   }
   if (order.status === 'pending' && !isSameDay(order.created_at, new Date()) && !isManager) {
-    return fail(400, '只能修改当天提交的单据（隔天改价请让老板或管理员处理）')
+    return fail(400, '只能修改当天提交的单据（隔天改价请联系管理员处理）')
   }
 
   const items = await query('SELECT * FROM inbound_order_items WHERE order_id = ?', [id])
@@ -585,6 +605,7 @@ async function confirm(ctx, data = {}) {
 
   await writeOpLog(null, {
     openid: operator.openid, userName: operator.name,
+    role: (ctx.user.roles || []).join(','),
     action: 'inbound_confirm', targetType: 'order', targetId: id,
     detail: `确认入库单 ${order.order_no}`, ip: ctx.ip
   })
@@ -605,7 +626,9 @@ async function cancel(ctx, data = {}) {
 
   assertOrderVisible(ctx, order)
 
-  const isManager = hasAnyRole(ctx.user, ['boss', 'admin'])
+  // 2026-10-09 老板只读：cancel 没有 roleRules 条目，这里的内部分支就是唯一防线，
+  //   原先认 ['boss','admin'] → 老板能作废入库单（含已确认的，会回减库存）。收紧为只认 admin。
+  const isManager = hasAnyRole(ctx.user, ['admin'])
   const isOwner = order.operator_openid === identityOf(ctx.user)
 
   if (order.status === 'cancelled') return fail(400, '该单据已作废')
@@ -657,6 +680,7 @@ async function cancel(ctx, data = {}) {
 
     await writeOpLog(conn, {
       openid: operator.openid, userName: operator.name,
+      role: (ctx.user.roles || []).join(','),
       action: 'inbound_cancel', targetType: 'order', targetId: id,
       detail: `作废入库单 ${order.order_no}，库存已回退${reason ? '，原因：' + reason : ''}`, ip: ctx.ip
     })
@@ -681,11 +705,14 @@ module.exports = {
   name: 'inbound',
   publicActions: [],
   roleRules: {
-    // 流程重构 V2（2026-10-03）：入库归仓管员，原 'in'（入库员）已并入 'storekeeper'。
-    // 'purchase' 暂时保留（采购员只管买的改造在 P4 阶段做，此处不提前收紧）。
-    submit: ['purchase', 'storekeeper', 'boss', 'admin'],
-    confirm: ['storekeeper', 'boss', 'admin'],
-    updatePrice: ['purchase', 'boss', 'admin', 'storekeeper']
+    // 流程重构 V2（2026-10-03）：
+    //   入库归仓管员 —— 原 'in'（入库员）已并入 'storekeeper'；
+    //   采购员「只管买」—— 收料入库由仓管完成（采购任务单里带单价，
+    //   收料时自动生成入库单），所以 submit 不再对 purchase 开放。
+    // 2026-10-09：老板只读，入库相关动作一律收回 boss
+    submit: ['storekeeper', 'admin'],
+    confirm: ['storekeeper', 'admin'],
+    updatePrice: ['admin', 'storekeeper']
   },
   actions: { submit, list, detail, updatePrice, confirm, cancel, pendingCount }
 }

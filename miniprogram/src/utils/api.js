@@ -31,10 +31,30 @@ export const outboundApi = {
   detail: (data) => callCloud('outbound', 'detail', data),
   cancel: (data) => callCloud('outbound', 'cancel', data),
   confirm: (data) => callCloud('outbound', 'confirm', data),
+  // 流程重构 V2 · P2：确认之后的两个环节
+  pickDone: (data) => callCloud('outbound', 'pickDone', data),   // 仓管：拣货完成
+  receive: (data) => callCloud('outbound', 'receive', data),     // 领料员：确认收货（此刻扣库存）
   reject: (data) => callCloud('outbound', 'reject', data),
   pendingCount: () => callCloud('outbound', 'pendingCount'),
-  // 我提交的单被驳回的通知（提交人自己看得到）
+  pickingCount: () => callCloud('outbound', 'pickingCount'),
+  // 我提交的单被驳回 / 待收货 的通知（提交人自己看得到）
   myNotice: (data) => callCloud('outbound', 'myNotice', data)
+}
+
+// 采购任务（流程重构 V2 · P4）
+export const purchaseApi = {
+  create: (data) => callCloud('purchase', 'create', data),       // 仓管发任务
+  list: (data) => callCloud('purchase', 'list', data),
+  detail: (data) => callCloud('purchase', 'detail', data),
+  take: (data) => callCloud('purchase', 'take', data),           // 采购员领取
+  entry: (data) => callCloud('purchase', 'entry', data),         // 采购员录入
+  receive: (data) => callCloud('purchase', 'receive', data),     // 仓管整单入库
+  receiveItem: (data) => callCloud('purchase', 'receiveItem', data), // 仓管逐项到货登记/退货
+  stockItem: (data) => callCloud('purchase', 'stockItem', data),   // 仓管单项先入库（到齐项）
+  rejectBack: (data) => callCloud('purchase', 'rejectBack', data),
+  cancel: (data) => callCloud('purchase', 'cancel', data),
+  myTodoCount: () => callCloud('purchase', 'myTodoCount'),
+  assignees: () => callCloud('purchase', 'assignees')
 }
 
 export const inboundApi = {
@@ -65,7 +85,9 @@ export const statsApi = {
   stockFlow: (data) => callCloud('stats', 'stockFlow', data),
   materialRank: (data) => callCloud('stats', 'materialRank', data),
   operatorStats: (data) => callCloud('stats', 'operatorStats', data),
-  warehouseSummary: () => callCloud('stats', 'warehouseSummary')
+  warehouseSummary: () => callCloud('stats', 'warehouseSummary'),
+  // 库存预警「通知采购」：真实投递站内消息给采购员/仓管（2026-10-09 替换假按钮）
+  notifyWarning: (data) => callCloud('stats', 'notifyWarning', data)
 }
 
 export const supplierApi = {
@@ -117,8 +139,11 @@ export async function withLoading(fn, { loadingText = '加载中...', showError 
 export function statusText(status) {
   const map = {
     pending: '待确认',
+    // 流程重构 V2 · P2：领料线新增的两个环节
+    picking: '待拣货',
+    receiving: '待收货',
     confirmed: '已确认',
-    cancelled: '已撤销',
+    cancelled: '已作废',
     rejected: '已驳回',
     in_progress: '盘点中',
     pending_review: '待审核',
@@ -126,6 +151,19 @@ export function statusText(status) {
     approved: '已通过',
     active: '正常',
     disabled: '已禁用'
+  }
+  return map[status] || status || ''
+}
+
+/** 采购任务状态文案（P4） */
+export function purchaseStatusText(status) {
+  const map = {
+    open: '待领取',
+    taken: '采购中',
+    purchased: '待收料',
+    receiving: '收货中',
+    received: '已入库',
+    cancelled: '已取消'
   }
   return map[status] || status || ''
 }
@@ -173,8 +211,11 @@ export default {
   supplier: supplierApi,
   warehouse: warehouseApi,
   user: userApi,
+  message: messageApi,
+  purchase: purchaseApi,
   withLoading,
   statusText,
+  purchaseStatusText,
   typeText,
   changeTypeText
 }

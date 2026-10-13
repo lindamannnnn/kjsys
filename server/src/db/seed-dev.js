@@ -48,13 +48,37 @@ const DEV_USERS = [
     openid: 'dev_sk',
     real_name: '开发·仓管',
     roles: ['storekeeper'],
+    // ⚠️ 必须是 [1,2]：role-agent 测试套件把 dev_sk 当作「管配件仓+成品仓」的那个仓管，
+    //    tests/role-agent/roles/coverage.js 明确断言他「看到且只看到自己的 2 个仓」。
+    //    若这里写成 [1]，跑一次 seed:dev 就会把他降成单仓，整套回归会连锁失败（2026-10-06 踩过）。
+    warehouse_ids: [1, 2]
+  },
+  // 仓管按仓拆分（2026-10-03）：配件仓管只管 wh1，成品仓管只管 wh2。
+  // 这两个身份被 role-agent 的 warehouse-split-check.js 直接引用，必须存在。
+  {
+    openid: 'dev_sk_parts',
+    real_name: '开发·配件仓管',
+    roles: ['storekeeper'],
     warehouse_ids: [1]
+  },
+  {
+    openid: 'dev_sk_goods',
+    real_name: '开发·成品仓管',
+    roles: ['storekeeper'],
+    warehouse_ids: [2]
   },
   {
     openid: 'dev_purchase',
     real_name: '开发·采购',
     roles: ['purchase'],
     warehouse_ids: [1]
+  },
+  // 厂长（director，2026-10-06）：发采购单、盘点、审盘点，看两仓库存（含金额）；不碰入库/驳回
+  {
+    openid: 'dev_director',
+    real_name: '开发·厂长',
+    roles: ['director'],
+    warehouse_ids: [1, 2]
   },
   {
     openid: 'dev_boss',

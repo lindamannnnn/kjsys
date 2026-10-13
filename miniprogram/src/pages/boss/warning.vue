@@ -19,6 +19,7 @@
       :refresher-enabled="true"
       :refresher-triggered="refreshing"
       @refresherrefresh="onRefresh"
+      @scrolltolower="onLoadMore"
     >
       <view
         v-for="item in warningList"
@@ -48,8 +49,12 @@
           </view>
         </view>
         <view class="warning-action">
-          <button class="btn-notify" @click="onNotify(item)">
-            通知采购
+          <button
+            class="btn-notify"
+            :disabled="notifyingId === item._id"
+            @click="onNotify(item)"
+          >
+            {{ notifyingId === item._id ? '通知中' : '通知采购' }}
           </button>
         </view>
       </view>
@@ -59,6 +64,9 @@
         <text class="empty-text">暂无库存预警</text>
         <text class="empty-sub">所有物料库存正常</text>
       </view>
+
+      <view v-else-if="noMore" class="list-end">已经到底了</view>
+      <view v-else class="list-end">上拉加载更多</view>
     </scroll-view>
   </view>
 </template>
@@ -71,17 +79,33 @@ import { statsApi } from '@/utils/api'
 const warningList = ref([])
 const total = ref(0)
 const refreshing = ref(false)
-// 默认只看"有库存或流动过的"物料，避免几千条从没动过的档案料淹没真正要补的货
+// 默认只看"有库存或流动过的"物料，避免几千条从没动过的物料淹没真正要补的货
 const includeIdle = ref(false)
+
+/* ---------- 分页（2026-10-09 修：原先固定 100 条、翻不到后面，而顶部还显示总数）---------- */
+const page = ref(1)
+const pageSize = 20
+const noMore = ref(false)
+const loadingMore = ref(false)
+
+/* ---------- 通知采购：正在通知的物料 id（按钮防连点） ---------- */
+const notifyingId = ref('')
 
 function toggleIdle() {
   includeIdle.value = !includeIdle.value
   loadWarnings()
 }
 
-/** 预警严重程度文案 */
+/** 预警严重程度文案
+ *  ⚠️ 后端返回的是 out_of_stock / critical / low（stats.js 的 CASE 表达式），
+ *     这里原先写成 out / low / idle —— 最严重的两类根本匹配不上，标签永远不显示。 */
 function severityText(level) {
-  const map = { out: '已缺货', low: '低于预警', idle: '从未动过' }
+  const map = {
+    out_of_stock: '已缺货',
+    critical: '严重不足',
+    low: '低于预警',
+    idle: '从未动过'
+  }
   return map[level] || ''
 }
 
@@ -90,14 +114,17 @@ function onRefresh() {
 }
 
 async function loadWarnings() {
+  page.value = 1
+  noMore.value = false
   try {
     const res = await statsApi.warning({
       page: 1,
-      pageSize: 100,
+      pageSize,
       includeIdle: includeIdle.value
     })
     warningList.value = res.list || []
     total.value = res.total || 0
+    noMore.value = warningList.value.length >= total.value
   } catch (err) {
     uni.showToast({ title: err.message || '加载失败', icon: 'none' })
   } finally {
@@ -105,8 +132,63 @@ async function loadWarnings() {
   }
 }
 
-function onNotify(item) {
-  uni.showToast({ title: `已通知采购: ${item.name}`, icon: 'none' })
+/** 上拉加载下一页 */
+async function onLoadMore() {
+  if (loadingMore.value || noMore.value) return
+  loadingMore.value = true
+  try {
+    const next = page.value + 1
+    const res = await statsApi.warning({
+      page: next,
+      pageSize,
+      includeIdle: includeIdle.value
+    })
+    const list = res.list || []
+    if (!list.length) {
+      noMore.value = true
+    } else {
+      warningList.value = [...warningList.value, ...list]
+      page.value = next
+      total.value = res.total || total.value
+      if (warningList.value.length >= total.value) noMore.value = true
+    }
+  } catch (err) {
+    uni.showToast({ title: err.message || '加载失败', icon: 'none' })
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+/**
+ * 通知采购（2026-10-09 修）
+ * 原先只有一句 toast、**没有任何接口调用** —— 老板以为通知了，采购根本收不到。
+ * 现在真实投递站内消息给「采购员 + 仓管」，成功/失败都给出准确反馈。
+ */
+async function onNotify(item) {
+  if (notifyingId.value) return
+  const confirmed = await new Promise((resolve) => {
+    uni.showModal({
+      title: '通知采购',
+      content: `把「${item.name} 库存不足（剩 ${item.current_stock} ${item.unit || ''}）」通知给采购员和仓管？`,
+      confirmText: '通知',
+      success: (res) => resolve(res.confirm)
+    })
+  })
+  if (!confirmed) return
+
+  notifyingId.value = item._id
+  try {
+    const res = await statsApi.notifyWarning({
+      material_id: item._id,
+      warehouse_id: item.warehouse_id
+    })
+    uni.showToast({ title: res.message || '已通知采购', icon: 'none' })
+  } catch (err) {
+    // 失败必须说清原因（例如「没有可通知的采购员/仓管账号」），不能假装成功
+    uni.showToast({ title: err.message || '通知失败', icon: 'none', duration: 3000 })
+  } finally {
+    notifyingId.value = ''
+  }
 }
 
 // 首次进入即加载（onMounted 兜底，防止页面生命周期在某些端不触发导致空白）
@@ -266,8 +348,20 @@ onMounted(() => {
       &::after {
         border: none;
       }
+
+      &:disabled {
+        background: #ccc;
+      }
     }
   }
+}
+
+/* 上拉加载提示 */
+.list-end {
+  padding: 24rpx 0 40rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: #bbb;
 }
 
 .empty {

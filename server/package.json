@@ -8,7 +8,7 @@
     "start": "node src/app.js",
     "dev": "node --watch src/app.js",
     "db:init": "node src/db/init.js",
-    "db:migrate": "node src/db/migrate-v2.js",
+    "db:migrate": "node src/db/migrate-v2.js && node src/db/migrate-purchase-item-fields.js && node src/db/migrate-outbound-attachment.js",
     "db:seed": "node src/db/seed.js",
     "seed:dev": "node src/db/seed-dev.js",
     "db:reset-admin": "node src/db/reset-admin.js",
@@ -17,10 +17,16 @@
     "apply:subcategory": "node src/db/apply-subcategory.js",
     "apply:code": "node src/db/apply-material-code.js",
     "verify": "node src/db/verify.js",
+    "test:roles": "node tests/role-agent/run.js --rounds 3",
+    "test:ui": "node tests/role-agent/ui-check.js",
+    "test:roleagent": "node tests/role-agent/run.js --rounds 3 && node tests/role-agent/ui-check.js",
     "test:api": "node tests/api-test.js",
     "test:contract": "node tests/verify-frontend-contracts.js",
+    "test:security": "node tests/security-guard-check.js",
     "audit:data": "node tests/data-audit.js",
-    "db:apply-messages": "node src/db/apply-messages-table.js"
+    "db:apply-messages": "node src/db/apply-messages-table.js",
+    "db:migrate-outbound": "node src/db/migrate-outbound-4stage.js",
+    "db:apply-purchase": "node src/db/apply-purchase-tables.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

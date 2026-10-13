@@ -18,7 +18,11 @@
 //   生产/体验版：腾讯云轻量服务器（域名备案完成后换成 https 域名）
 //
 // ⚠️ 本地联调改回局域网 IP 后重新编译；服务器部署走 http://119.91.206.235:3000
-const API_BASE = 'http://119.91.206.235:3000'
+// 构建时可用 __API_BASE__ 覆盖（见 vite.config.js）：H5 本地验证默认指向 127.0.0.1:3000，
+// 小程序生产包注入空串 → 回退到这里写死的生产地址，行为不变。
+const API_BASE = (typeof __API_BASE__ !== 'undefined' && __API_BASE__)
+  ? __API_BASE__
+  : 'http://119.91.206.235:3000'
 
 // 开发登录开关：不再写死，由构建配置在编译期注入（见 vite.config.js 的 define）
 //   - 本地开发 / H5 浏览器联调 → true，可用下面的测试身份直接登录，不依赖微信 API
@@ -60,8 +64,10 @@ export function setDevOpenid(openid) {
 export const DEV_IDENTITIES = [
   { openid: 'dev_worker_01', label: '全能', desc: '领料 + 仓管 + 采购' },
   { openid: 'dev_out', label: '领料员', desc: '提交领料单（出库）' },
-  { openid: 'dev_sk', label: '仓管', desc: '确认/驳回单据、入库、盘点' },
+  { openid: 'dev_sk_parts', label: '配件仓管', desc: '只管配件仓：确认/入库/盘点' },
+  { openid: 'dev_sk_goods', label: '成品仓管', desc: '只管成品仓：确认/入库/盘点' },
   { openid: 'dev_purchase', label: '采购', desc: '入库登记、库存流水对账' },
+  { openid: 'dev_director', label: '厂长', desc: '看两仓库存（含金额）、发采购、盘点与审盘点' },
   { openid: 'dev_boss', label: '老板', desc: '看板、预警、全部单据' }
 ]
 
@@ -153,6 +159,29 @@ function settleRequestId(fingerprint) {
 }
 
 /* ============================================================
+ * 登录竞态处理
+ * ------------------------------------------------------------
+ * 问题（实测发现）：直接深链进某个页面（或令牌刚过期）时，页面的
+ * onMounted 数据请求会跑在「启动自动登录」前面，吃到 401 后页面
+ * 就停在空态（暂无物料、没有仓库切换条），不会自愈。
+ *
+ * 处理：401 且允许自动登录时，先等登录完成，再原样重试一次原请求。
+ * 全局只跑一个登录（loginInFlight 去重），只重试一次（防死循环），
+ * auth 模块自身不重试（登录/改密接口的 401 是业务结果，不是竞态）。
+ * ============================================================ */
+let loginInFlight = null
+
+function ensureLogin() {
+  if (!loginInFlight) {
+    // 动态取引用，避免模块初始化顺序问题
+    loginInFlight = Promise.resolve()
+      .then(() => loginWithWechat())
+      .finally(() => { loginInFlight = null })
+  }
+  return loginInFlight
+}
+
+/* ============================================================
  * 核心：调用后端接口
  * ============================================================ */
 
@@ -184,9 +213,18 @@ export function callCloud(name, action, data = {}, options = {}) {
       success: (res) => {
         const body = res.data || {}
 
-        // 令牌失效：清掉本地登录态，让页面跳回登录
+        // 令牌失效 / 还没登录
         if (body.code === 401) {
           settleRequestId(fingerprint)
+          // 开发模式下可静默自动登录：等登录完成后把原请求原样重试一次，
+          // 页面无感知（修「深链进页面时数据请求跑在登录前面导致空白」）
+          const canRetry = DEV_MODE && !options.__retriedAfterLogin && name !== 'auth'
+          if (canRetry) {
+            ensureLogin()
+              .then(() => callCloud(name, action, data, { ...options, __retriedAfterLogin: true }))
+              .then(resolve, reject)
+            return
+          }
           clearToken()
           reject(Object.assign(new Error(body.message || '登录已过期'), { code: 401 }))
           return

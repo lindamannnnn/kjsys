@@ -52,6 +52,7 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
+import { canAccessPath, roleHome } from '@/constants/menu'
 
 const route = useRoute()
 const router = useRouter()
@@ -74,7 +75,18 @@ async function handleLogin() {
     const result = await userStore.login(form.value.username, form.value.password)
     if (result.success) {
       ElMessage.success('登录成功')
-      router.replace(route.query.redirect || '/')
+      /*
+       * 登录后去哪儿：
+       *   ① 无权限页的 redirect 目标一律不理（否则仓管被 /user/list 的 redirect 带进去，
+       *      守卫再把他弹回首页 + 弹一句「没权限」，白挨一次警告）；
+       *   ② 其余情况只认「这个角色自己的首页」——仓管/厂长/采购各自落自己那套界面。
+       */
+      const roles = result.roles || []
+      const redirect = route.query.redirect ? String(route.query.redirect) : ''
+      const home = roleHome(roles)
+      // 带查询串的 redirect（如 /material/list?keyword=x）要拿纯路径去做权限判断
+      const redirectPath = redirect.split('?')[0].split('#')[0]
+      router.replace(redirect && canAccessPath(redirectPath, roles) ? redirect : home)
     } else {
       // store 已捕获接口错误，message 即后端返回的中文原因（如「账号或密码错误」）
       ElMessage.error(result.message || '登录失败')
@@ -89,7 +101,8 @@ async function handleLogin() {
 
 <style scoped>
 .login-container {
-  min-height: 100vh;
+  /* --app-h 由 utils/viewport-fit.js 同步；取不到时退回 100vh */
+  min-height: var(--app-h, 100vh);
   display: flex;
   align-items: center;
   justify-content: center;

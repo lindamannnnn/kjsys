@@ -1,10 +1,10 @@
 <template>
   <div class="layout-container">
-    <!-- 侧边栏 -->
+    <!-- 侧边栏：菜单按「角色 + 所管仓库」过滤，配件仓管登录后只会看到配件仓的东西 -->
     <aside class="sidebar">
       <div class="logo">
         <h2>胜龙进销存</h2>
-        <p>后台管理系统</p>
+        <p>{{ consoleName }}</p>
       </div>
 
       <el-menu
@@ -15,69 +15,24 @@
         active-text-color="#ffffff"
         router
       >
-        <el-menu-item index="/dashboard">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>数据看板</span>
-        </el-menu-item>
+        <template v-for="item in menuItems">
+          <!-- 分组：一个子项都没有时整组不渲染（在 buildMenu 里已滤掉） -->
+          <el-sub-menu v-if="item.type === 'group'" :key="'g-' + item.key" :index="'g-' + item.key">
+            <template #title>
+              <el-icon><component :is="iconOf(item.icon)" /></el-icon>
+              <span>{{ item.title }}</span>
+            </template>
+            <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+              <span v-if="dotOf(child.path)" :class="['wh-dot', dotOf(child.path)]"></span>
+              {{ titleOf(child.path) }}
+            </el-menu-item>
+          </el-sub-menu>
 
-        <el-sub-menu index="stats">
-          <template #title>
-            <el-icon><TrendCharts /></el-icon>
-            <span>数据统计</span>
-          </template>
-          <el-menu-item index="/stats/overview">出入库统计</el-menu-item>
-          <el-menu-item index="/stats/material-rank">物料排行</el-menu-item>
-          <el-menu-item index="/stats/operator-stats">人员绩效</el-menu-item>
-        </el-sub-menu>
-
-        <el-menu-item index="/user/list">
-          <el-icon><User /></el-icon>
-          <span>用户管理</span>
-        </el-menu-item>
-
-        <el-menu-item index="/role/list">
-          <el-icon><Lock /></el-icon>
-          <span>权限管理</span>
-        </el-menu-item>
-
-        <el-sub-menu index="material">
-          <template #title>
-            <el-icon><Box /></el-icon>
-            <span>物料管理</span>
-          </template>
-          <!-- 物料按仓库分开两个入口：配件仓 / 成品仓 -->
-          <el-menu-item index="/material/parts">
-            <span class="wh-dot wh-dot--parts"></span>配件仓物料
+          <el-menu-item v-else :key="item.path" :index="item.path">
+            <el-icon><component :is="iconOf(metaOf(item.path).icon)" /></el-icon>
+            <span>{{ titleOf(item.path) }}</span>
           </el-menu-item>
-          <el-menu-item index="/material/product">
-            <span class="wh-dot wh-dot--product"></span>成品仓物料
-          </el-menu-item>
-          <el-menu-item index="/material/import">批量导入</el-menu-item>
-        </el-sub-menu>
-
-        <el-sub-menu index="order">
-          <template #title>
-            <el-icon><Document /></el-icon>
-            <span>单据管理</span>
-          </template>
-          <el-menu-item index="/order/outbound">出库单</el-menu-item>
-          <el-menu-item index="/order/inbound">入库单</el-menu-item>
-        </el-sub-menu>
-
-        <el-menu-item index="/check/list">
-          <el-icon><Checked /></el-icon>
-          <span>盘点管理</span>
-        </el-menu-item>
-
-        <el-menu-item index="/setting/company">
-          <el-icon><Setting /></el-icon>
-          <span>系统设置</span>
-        </el-menu-item>
-
-        <el-menu-item index="/system/logs">
-          <el-icon><Tickets /></el-icon>
-          <span>操作日志</span>
-        </el-menu-item>
+        </template>
       </el-menu>
     </aside>
 
@@ -92,6 +47,9 @@
           </el-breadcrumb>
         </div>
         <div class="user-info">
+          <el-tag v-if="scopeLabel" type="info" size="small" effect="plain" class="scope-tag">
+            {{ scopeLabel }}
+          </el-tag>
           <el-tag v-if="mustChange" type="danger" size="small" class="change-tip" @click="goPassword">
             请先修改初始密码
           </el-tag>
@@ -102,6 +60,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item disabled>角色：{{ roleNames }}</el-dropdown-item>
+                <el-dropdown-item disabled>身份：{{ consoleName }}</el-dropdown-item>
                 <el-dropdown-item divided @click="goPassword">
                   <el-icon><Key /></el-icon> 修改密码
                 </el-dropdown-item>
@@ -121,11 +80,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { ROLE_MAP } from '@/constants/roles'
+import { buildMenu, pageMeta } from '@/constants/menu'
+import { cacheWarehouseCodes, resolveWarehouseCodes } from '@/constants/warehouse-scope'
+import { warehouseApi } from '@/api'
 import {
   DataAnalysis,
   TrendCharts,
@@ -137,7 +99,10 @@ import {
   Setting,
   Tickets,
   Key,
-  ArrowDown
+  ArrowDown,
+  Bell,
+  Monitor,
+  ShoppingCart
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -146,6 +111,80 @@ const userStore = useUserStore()
 
 const activeMenu = computed(() => route.path)
 const currentRoute = computed(() => route)
+
+/** 菜单图标按名字取（page-matrix.json 里存的是字符串，不能直接放组件） */
+const ICONS = {
+  DataAnalysis,
+  TrendCharts,
+  User,
+  Lock,
+  Box,
+  Document,
+  Checked,
+  Setting,
+  Tickets,
+  Bell,
+  Monitor,
+  ShoppingCart
+}
+function iconOf(name) {
+  return ICONS[name] || Box
+}
+
+const metaOf = (path) => pageMeta(path) || {}
+const titleOf = (path) => metaOf(path).title || path
+const dotOf = (path) => {
+  const dot = metaOf(path).dot
+  return dot ? `wh-dot--${dot}` : ''
+}
+
+const warehouses = ref([])
+
+/**
+ * 该用户「能看的仓库 code」（判定口径统一在 constants/warehouse-scope.js）。
+ * - warehouse_ids 为空 = 不隔离（老板/管理员），返回 null 表示不做仓库过滤
+ * - 仓库列表还没加载出来也返回 null —— 宁可多显示一个菜单，也别把人家的入口藏没了
+ */
+const myWarehouseCodes = computed(() =>
+  resolveWarehouseCodes(userStore.userInfo, warehouses.value)
+)
+
+/**
+ * 把结果缓存到 localStorage：路由守卫要**同步**判定（防手敲 URL 进成品仓账号
+ * 看不到的页面，比如采购任务），而守卫跑在任何组件挂载之前、没法等接口。
+ */
+watch(
+  [() => userStore.userInfo, warehouses],
+  () => cacheWarehouseCodes(userStore.userInfo, warehouses.value),
+  { immediate: true, deep: false }
+)
+
+const menuItems = computed(() => buildMenu(userStore.roles || [], myWarehouseCodes.value))
+
+/** 顶部显示的「所管仓库」，让仓管一眼知道自己在哪个仓的界面里 */
+const scopeLabel = computed(() => {
+  const ids = (userStore.userInfo && userStore.userInfo.warehouse_ids) || []
+  if (!Array.isArray(ids) || !ids.length) return ''
+  const names = warehouses.value
+    .filter((w) => ids.map(Number).includes(Number(w._id !== undefined ? w._id : w.id)))
+    .map((w) => w.name)
+  return names.join('、')
+})
+
+/** 当前这套菜单是哪套后台（给用户一个「我进对地方了」的确认） */
+const consoleName = computed(() => {
+  const roles = userStore.roles || []
+  const codes = myWarehouseCodes.value || []
+  if (roles.includes('admin')) return '后台管理系统'
+  if (roles.includes('boss')) return '经营看板'
+  if (roles.includes('director')) return '厂长后台'
+  if (roles.includes('storekeeper')) {
+    if (codes.length === 1) return codes[0] === 'peijian' ? '配件仓后台' : '成品仓后台'
+    return '仓库后台'
+  }
+  if (roles.includes('purchase')) return '采购后台'
+  return '后台管理系统'
+})
 
 const roleNames = computed(() => {
   const list = userStore.roles || []
@@ -164,12 +203,23 @@ function logout() {
   ElMessage.success('已退出登录')
   router.replace('/login')
 }
+
+onMounted(async () => {
+  // 只为「按仓库收敛菜单」用；失败不影响任何功能（myWarehouseCodes 会退回 null = 不过滤）
+  try {
+    const res = await warehouseApi.list()
+    warehouses.value = (res.data && res.data.list) || []
+  } catch (err) {
+    console.warn('加载仓库列表失败（菜单将不做仓库过滤）:', err.message)
+  }
+})
 </script>
 
 <style scoped>
 .layout-container {
   display: flex;
-  min-height: 100vh;
+  /* --app-h 由 utils/viewport-fit.js 同步；取不到时退回 100vh */
+  min-height: var(--app-h, 100vh);
 }
 
 .sidebar {
@@ -177,7 +227,8 @@ function logout() {
   background: #1a1a2e;
   color: #fff;
   position: fixed;
-  height: 100vh;
+  /* 同上：跟随实际可见高度，而不是只看 layout viewport 的 vh */
+  height: var(--app-h, 100vh);
   overflow-y: auto;
 }
 
@@ -261,6 +312,10 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.scope-tag {
+  cursor: default;
 }
 
 .change-tip {

@@ -1,7 +1,7 @@
 <script setup>
 import { onLaunch } from '@dcloudio/uni-app'
 import { useUserStore } from './store/user'
-import { DEV_MODE } from './utils/cloud'
+import { DEV_MODE, API_BASE } from './utils/cloud'
 
 onLaunch(async () => {
   console.log('App Launch')
@@ -22,8 +22,38 @@ onLaunch(async () => {
       await userStore.login()
     }
   } catch (err) {
-    // 常见原因：后端没启动。给出明确提示，不静默吞掉。
+    // 常见原因：后端没启动 / 真机连不到电脑 / 开发者工具没勾「不校验合法域名」。
+    // 开发环境下必须明明白白弹出来（含排查提示），不能只 console 一句就装死。
+    // ⚠️ 这里显示的必须是**编译期真实注入的 API_BASE**，不能写死 127.0.0.1 ——
+    //    真机调试时 127.0.0.1 指的是手机自己，写死了会把人往错方向带。
     console.warn('[启动] 登录失败', err)
+    if (DEV_MODE) {
+      const msg = String((err && err.message) || err || '')
+      // 提示要跟着「接口地址是哪一类」走，否则会把人往错方向带：
+      //   · 局域网地址（192.168./10./172.16-31.）→ 手机必须和电脑同一 WiFi
+      //   · 公网地址（隧道/服务器）→ 本地有没有起隧道、服务器有没有放行端口
+      const isLanAddr = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(API_BASE)
+      const hints = isLanAddr
+        ? [
+            '后端是否在跑（无响应最常见）',
+            '手机与电脑要连同一 WiFi（当前是局域网地址，用流量连不上）',
+            '开发者工具「详情 → 本地设置」勾上「不校验合法域名」'
+          ]
+        : [
+            '本机后端是否在跑（无响应最常见）',
+            '反向隧道是否在线（隧道断了就报这个；重开：bash tunnel.sh）',
+            '服务器防火墙是否放行该端口（公网连不上多半卡在这）',
+            '开发者工具「详情 → 本地设置」勾上「不校验合法域名」'
+          ]
+      const marks = ['①', '②', '③', '④']
+      uni.showModal({
+        title: '自动登录失败（开发模式）',
+        content: `${msg}\n\n当前接口：${API_BASE}\n\n排查：`
+          + hints.map((h, i) => `\n${marks[i]} ${h}`).join(''),
+        showCancel: false,
+        confirmText: '知道了'
+      })
+    }
   }
 })
 </script>

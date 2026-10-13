@@ -5,6 +5,7 @@
  */
 const cron = require('node-cron')
 const { query, queryOne } = require('../db/pool')
+const { WARNING_COND } = require('../services/warning')
 
 let started = false
 
@@ -14,7 +15,7 @@ async function warningScan() {
     const rows = await query(
       `SELECT m.id, m.name, m.spec, m.current_stock, m.warning_stock, w.name AS warehouse_name
          FROM materials m LEFT JOIN warehouses w ON w.id = m.warehouse_id
-        WHERE m.is_deleted = 0 AND m.current_stock <= m.warning_stock
+        WHERE m.is_deleted = 0 AND ${WARNING_COND}
         ORDER BY (m.warning_stock - m.current_stock) DESC
         LIMIT 200`
     )

@@ -65,11 +65,26 @@ function nonNegativeInt(value, label = '实盘数量') {
   return n
 }
 
-/** 单价校验：非负，最多两位小数 */
+/**
+ * 单价校验：必须大于 0，最多两位小数
+ *
+ * ⚠️ 整改（V3 测试 P1-1）：原实现只要求「非负」，于是入库单价可以填 0，
+ *   这批货的入库成本就变成 0，加权平均成本被拉低、库存价值与毛利全失真。
+ *   而采购录入那边（purchase.entry）一直是「必须 > 0」的，两边口径必须一致。
+ *   真的不收钱的（赠品/样品）应走「其他」并把实际成本记 0 的场景另行设计，
+ *   不能在入库单上随手填 0。
+ */
 function unitPrice(value, label = '单价') {
   const n = toNumberStrict(value)
   if (!Number.isFinite(n)) {
     throw errors.badRequest(`${label}必须是数字（当前填入：${value === '' ? '空' : value}）`)
+  }
+  if (n === 0) {
+    throw errors.badRequest(
+      `${label}必须大于 0（当前填入：0）。` +
+      `填 0 会让这批货的入库成本变成 0，库存金额和成本核算都会失真；` +
+      `赠品/样品请填一个实际成本价`
+    )
   }
   if (n < 0) {
     throw errors.badRequest(`${label}不能是负数（当前填入：${n}）`)

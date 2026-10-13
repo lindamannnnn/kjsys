@@ -1,0 +1,264 @@
+{
+  "_comment": [
+    "后台「页面 → 允许角色 + 依赖的后端动作」矩阵（唯一事实来源）。",
+    "",
+    "⚠️ 这份表是前端显隐 + 路由守卫的依据，**不是权限防线**：真正的拦截在后端 roleRules",
+    "   （server/src/modules/*.js）。这里只做两件事：",
+    "     ① 不给用户看到「点进去就 403」的菜单；② 让 server/tests/role-agent/batch2-admin-roles-check.js",
+    "        能自动比对「页面声明的角色」与「后端真实权限」是否一致 —— 改后端权限后忘了同步这张表，测试会红。",
+    "",
+    "字段说明：",
+    "  title    —— 页面标题（也是菜单文案）",
+    "  roles    —— 允许看到/进入该页的角色（空数组=不限制）",
+    "  must     —— 页面**渲染就必须成功**的接口，该角色的每一次调用都不能 403",
+    "  optional —— 按角色显隐的按钮/模块，对应接口允许 403（前端负责藏按钮）",
+    "  menu     —— 是否出现在左侧菜单（false=隐藏页，只能从别处跳进来）",
+    "  group    —— 菜单分组 key（见 menu.js 的 MENU_GROUPS）",
+    "  icon     —— Element Plus 图标名（仅菜单项用）",
+    "  warehouseCode —— 该菜单只对管这个仓的角色显示（配件仓管只看配件仓）",
+    "  homeOf   —— 该页是哪些角色的落地首页（登录后跳这里）"
+  ],
+  "pages": {
+    "/dashboard": {
+      "title": "数据看板",
+      "roles": ["boss", "admin", "storekeeper", "director"],
+      "must": ["stats.overview", "stats.warning", "stats.orderFlow"],
+      "optional": [],
+      "menu": true,
+      "icon": "DataAnalysis",
+      "homeOf": ["boss", "admin", "storekeeper", "director"]
+    },
+    "/screen": {
+      "title": "数据大屏",
+      "roles": ["boss", "admin"],
+      "must": [
+        "stats.overview",
+        "stats.warning",
+        "stats.orderFlow",
+        "stats.stockFlow",
+        "stats.stockList",
+        "stats.warehouseSummary",
+        "stats.materialRank",
+        "stats.operatorStats"
+      ],
+      "optional": [],
+      "menu": true,
+      "icon": "Monitor"
+    },
+    "/stats/overview": {
+      "title": "出入库统计",
+      "roles": ["boss", "admin", "storekeeper", "director", "purchase"],
+      "must": [
+        "stats.orderFlow",
+        "stats.stockFlow",
+        "stats.stockList",
+        "stats.warehouseSummary",
+        "material.categories",
+        "warehouse.list"
+      ],
+      "optional": ["stats.trend"],
+      "menu": true,
+      "group": "stats"
+    },
+    "/stats/monthly": {
+      "title": "月结表",
+      "roles": ["boss", "admin", "storekeeper", "director"],
+      "must": ["stats.monthly", "warehouse.list"],
+      "optional": ["stats.monthlyExport"],
+      "menu": true,
+      "group": "stats"
+    },
+    "/stats/material-rank": {
+      "title": "物料排行",
+      "roles": ["boss", "admin"],
+      "must": ["stats.materialRank"],
+      "optional": [],
+      "menu": true,
+      "group": "stats"
+    },
+    "/stats/operator-stats": {
+      "title": "人员绩效",
+      "roles": ["boss", "admin"],
+      "must": ["stats.operatorStats"],
+      "optional": [],
+      "menu": true,
+      "group": "stats"
+    },
+    "/user/list": {
+      "title": "用户管理",
+      "roles": ["admin", "boss"],
+      "must": ["user.list", "warehouse.list"],
+      "optional": [
+        "user.create",
+        "user.update",
+        "user.updateRole",
+        "user.disable",
+        "user.enable",
+        "user.approve",
+        "user.resetPassword"
+      ],
+      "menu": true,
+      "icon": "User"
+    },
+    "/role/list": {
+      "title": "权限管理",
+      "roles": ["admin", "boss"],
+      "must": ["user.list"],
+      "optional": [],
+      "menu": true,
+      "icon": "Lock"
+    },
+    "/material/list": {
+      "title": "物料列表",
+      "roles": ["boss", "admin", "storekeeper", "director"],
+      "must": ["material.list", "material.categories", "warehouse.list"],
+      "optional": ["material.delete"],
+      "menu": false,
+      "group": "material"
+    },
+    "/material/parts": {
+      "title": "配件仓物料",
+      "roles": ["boss", "admin", "storekeeper", "director"],
+      "must": ["material.list", "material.categories", "warehouse.list"],
+      "optional": ["material.delete"],
+      "menu": true,
+      "group": "material",
+      "dot": "parts",
+      "warehouseCode": "peijian"
+    },
+    "/material/product": {
+      "title": "成品仓物料",
+      "roles": ["boss", "admin", "storekeeper", "director"],
+      "must": ["material.list", "material.categories", "warehouse.list"],
+      "optional": ["material.delete"],
+      "menu": true,
+      "group": "material",
+      "dot": "product",
+      "warehouseCode": "chengpin"
+    },
+    "/material/edit": {
+      "title": "编辑物料",
+      "roles": ["admin", "storekeeper", "director"],
+      "must": [
+        "material.detail",
+        "material.categories",
+        "material.upsert",
+        "warehouse.list",
+        "upload.upload"
+      ],
+      "optional": [],
+      "menu": false,
+      "group": "material"
+    },
+    "/material/import": {
+      "title": "批量导入",
+      "roles": ["admin"],
+      "must": ["material.import", "warehouse.list"],
+      "optional": [],
+      "menu": true,
+      "group": "material"
+    },
+    "/order/outbound": {
+      "title": "出库单",
+      "roles": ["boss", "admin", "storekeeper", "director", "purchase"],
+      "must": ["outbound.list", "outbound.detail", "warehouse.list"],
+      "optional": [
+        "outbound.confirm",
+        "outbound.pickDone",
+        "outbound.receive",
+        "outbound.reject",
+        "outbound.cancel"
+      ],
+      "menu": true,
+      "group": "order"
+    },
+    "/order/inbound": {
+      "title": "入库单",
+      "roles": ["boss", "admin", "storekeeper", "purchase"],
+      "must": ["inbound.list", "inbound.detail", "warehouse.list"],
+      "optional": ["inbound.confirm", "inbound.updatePrice", "inbound.cancel"],
+      "menu": true,
+      "group": "order"
+    },
+    "/order/inbound-create": {
+      "title": "新建入库单",
+      "roles": ["admin", "storekeeper"],
+      "must": ["material.list", "material.categories", "warehouse.list", "inbound.submit"],
+      "optional": ["material.upsert", "upload.upload"],
+      "menu": true,
+      "group": "order"
+    },
+    "/order/outbound-create": {
+      "title": "成品仓出库",
+      "roles": ["admin", "director"],
+      "must": ["material.list", "material.categories", "warehouse.list", "outbound.submit"],
+      "optional": [],
+      "menu": true,
+      "group": "order"
+    },
+    "/order/purchase-tasks": {
+      "title": "采购任务",
+      "roles": ["boss", "admin", "storekeeper", "director", "purchase"],
+      "must": ["purchase.list", "purchase.detail", "purchase.assignees", "warehouse.list", "material.list"],
+      "optional": [
+        "purchase.create",
+        "purchase.take",
+        "purchase.entry",
+        "purchase.receive",
+        "purchase.rejectBack",
+        "purchase.cancel"
+      ],
+      "menu": true,
+      "icon": "ShoppingCart",
+      "homeOf": ["purchase"],
+      "warehouseCode": "peijian"
+    },
+    "/message/list": {
+      "title": "消息中心",
+      "roles": [],
+      "must": ["message.list"],
+      "optional": ["message.markRead", "message.markAllRead"],
+      "menu": true,
+      "icon": "Bell"
+    },
+    "/check/create": {
+      "title": "创建盘点",
+      "roles": ["admin", "storekeeper", "director"],
+      "must": ["check.create", "material.list", "material.categories", "warehouse.list", "user.assignees"],
+      "optional": [],
+      "menu": false,
+      "group": "check"
+    },
+    "/check/list": {
+      "title": "盘点管理",
+      "roles": ["boss", "admin", "storekeeper", "director"],
+      "must": ["check.list", "check.detail", "warehouse.list"],
+      "optional": ["check.create", "check.submit", "check.review", "check.cancel"],
+      "menu": true,
+      "icon": "Checked"
+    },
+    "/setting/company": {
+      "title": "系统设置",
+      "roles": ["admin"],
+      "must": ["warehouse.list", "warehouse.upsert", "stats.warehouseSummary"],
+      "optional": [],
+      "menu": true,
+      "icon": "Setting"
+    },
+    "/system/logs": {
+      "title": "操作日志",
+      "roles": ["boss", "admin"],
+      "must": ["user.logs"],
+      "optional": [],
+      "menu": true,
+      "icon": "Tickets"
+    },
+    "/user/password": {
+      "title": "修改密码",
+      "roles": [],
+      "must": ["auth.changePassword"],
+      "optional": [],
+      "menu": false
+    }
+  }
+}

@@ -1,5 +1,16 @@
 <template>
   <view class="container">
+    <!-- 状态筛选（只传后端 check.list 真正支持的 status） -->
+    <view class="status-bar">
+      <text
+        v-for="tab in statusTabs"
+        :key="tab.value"
+        class="status-tab"
+        :class="{ active: currentStatus === tab.value }"
+        @click="onStatusChange(tab.value)"
+      >{{ tab.label }}</text>
+    </view>
+
     <!-- 盘点任务列表 -->
     <scroll-view
       class="check-list"
@@ -7,6 +18,7 @@
       :refresher-enabled="true"
       :refresher-triggered="refreshing"
       @refresherrefresh="onRefresh"
+      @scrolltolower="onLoadMoreChecks"
     >
       <view
         v-for="item in checkList"
@@ -26,7 +38,7 @@
           </view>
           <view class="info-row">
             <text class="label">盘点范围</text>
-            <text class="value">{{ scopeText(item.scope) }}</text>
+            <text class="value">{{ scopeText(item.scope, item.warehouse_id) }}</text>
           </view>
           <view class="info-row">
             <text class="label">物料数量</text>
@@ -53,10 +65,16 @@
         <text class="empty-icon">📋</text>
         <text class="empty-text">暂无盘点任务</text>
       </view>
+
+      <view v-if="checkList.length" class="load-more">
+        <text v-if="checkLoadingMore">加载中...</text>
+        <text v-else-if="checkNoMore">已经到底了</text>
+        <text v-else>上拉加载更多</text>
+      </view>
     </scroll-view>
 
-    <!-- 新建盘点任务 -->
-    <view class="create-bar">
+    <!-- 新建盘点任务（老板只读，无 check.create 权限 → 不给入口） -->
+    <view v-if="canCreate" class="create-bar">
       <button class="btn-create" @click="openCreate">＋ 新建盘点任务</button>
     </view>
 
@@ -152,9 +170,28 @@ import { ref, computed, onMounted } from 'vue'
 import { onPageShow as onShow } from '@/utils/on-page-show'
 import { formatDate } from '@/utils/format'
 import { checkApi, materialApi, statsApi } from '@/utils/api'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+// 发起盘点：仓管 / 厂长 / 管理员（2026-10-09 老板只读后收回 boss）
+const canCreate = computed(() => userStore.hasRole(['storekeeper', 'director', 'admin']))
 
 const checkList = ref([])
 const refreshing = ref(false)
+
+/* ---------- 状态筛选 + 任务列表分页（与物料选择器 picker 的分页完全独立） ---------- */
+const statusTabs = [
+  { label: '全部', value: '' },
+  { label: '待盘点', value: 'pending' },
+  { label: '盘点中', value: 'in_progress' },
+  { label: '待审核', value: 'pending_review' },
+  { label: '已完成', value: 'completed' }
+]
+const currentStatus = ref('')
+const checkPage = ref(1)
+const checkNoMore = ref(false)
+const checkLoadingMore = ref(false)
+const CHECK_PAGE_SIZE = 100
 
 /* ---------- 新建盘点：类型 / 仓库 / 范围 ---------- */
 const createVisible = ref(false)
@@ -290,8 +327,8 @@ async function doCreate() {
         title: '确认整仓盘点？',
         content: `「${wh.name}」有 ${wh.material_count} 项物料，整仓盘点会生成同样多的明细，工作量大。建议改成抽盘，只选要盘的物料。`,
         confirmText: '仍要整仓',
-        cancelText: '我去选物料',
-        success: (r) => resolve(r.confirm)
+          cancelText: '去选物料',
+          success: (r) => resolve(r.confirm)
       })
     })
     if (!goOn) {
@@ -352,10 +389,26 @@ function typeText(type) {
   return map[type] || type
 }
 
-function scopeText(scope) {
+/**
+ * 细分类显示名：成品仓=车间、配件仓=编号分类（与后台建单页 / 物料页同一口径）。
+ * warehouseOptions 来自 warehouseSummary（已带 code），本页每次显示都刷新 → 可直接映射。
+ */
+function scopeLabel(warehouseId) {
+  const w = warehouseOptions.value.find(x => Number(x._id) === Number(warehouseId))
+  if (w && w.code === 'chengpin') return '车间'
+  if (w && w.code === 'peijian') return '编号分类'
+  return '分类'
+}
+
+function scopeText(scope, warehouseId) {
   if (!scope) return '全部物料'
-  if (scope.categories?.length) return `分类: ${scope.categories.join(',')}`
-  if (scope.material_ids?.length) return `指定 ${scope.material_ids.length} 项`
+  // 细分类（2026-10-12 起是真正的范围维度）；旧单可能只有 categories
+  const subs = Array.isArray(scope.sub_categories) ? scope.sub_categories : []
+  const cats = Array.isArray(scope.categories) ? scope.categories : []
+  const ids = Array.isArray(scope.material_ids) ? scope.material_ids : []
+  if (subs.length) return `${scopeLabel(warehouseId)}: ${subs.join('、')}`
+  if (cats.length) return `分类: ${cats.join('、')}`
+  if (ids.length) return `指定 ${ids.length} 项`
   return '全部物料'
 }
 
@@ -371,14 +424,52 @@ function onRefresh() {
   loadChecks()
 }
 
+// 切换状态筛选：页码归 1、列表整体替换
+function onStatusChange(v) {
+  currentStatus.value = v
+  loadChecks()
+}
+
+// check.list 只支持 status（未支持 keyword），只传后端真正认的参数
+function checkParams(p) {
+  return {
+    page: p,
+    pageSize: CHECK_PAGE_SIZE,
+    status: currentStatus.value || undefined
+  }
+}
+
+// 下拉刷新 / 切筛选：页码归 1，列表整体替换（不追加）
 async function loadChecks() {
+  checkPage.value = 1
+  checkNoMore.value = false
   try {
-    const res = await checkApi.list({ page: 1, pageSize: 100 })
-    checkList.value = res.list || []
+    const res = await checkApi.list(checkParams(checkPage.value))
+    const list = res.list || []
+    checkList.value = list
+    if (list.length < CHECK_PAGE_SIZE || list.length >= (res.total ?? Infinity)) checkNoMore.value = true
   } catch (err) {
     uni.showToast({ title: err.message || '加载失败', icon: 'none' })
   } finally {
     refreshing.value = false
+  }
+}
+
+/** 上拉加载更多：追加下一页（独立于物料选择器 loadMorePicker） */
+async function onLoadMoreChecks() {
+  if (checkNoMore.value || checkLoadingMore.value) return
+  checkLoadingMore.value = true
+  const next = checkPage.value + 1
+  try {
+    const res = await checkApi.list(checkParams(next))
+    const list = res.list || []
+    checkPage.value = next
+    checkList.value = [...checkList.value, ...list]
+    if (list.length < CHECK_PAGE_SIZE || checkList.value.length >= (res.total ?? Infinity)) checkNoMore.value = true
+  } catch (err) {
+    uni.showToast({ title: err.message || '加载更多失败', icon: 'none' })
+  } finally {
+    checkLoadingMore.value = false
   }
 }
 
@@ -406,6 +497,29 @@ onMounted(() => {
   padding: 20rpx 20rpx 0; /* 底部不留白：列表要一直顶到屏幕底，否则又露出一条灰带 */
   /* 容器自己还有 20rpx 内边距，height 不含 padding 会多出 20px 让人能拖动整页 */
   box-sizing: border-box;
+}
+
+.status-bar {
+  display: flex;
+  gap: 12rpx;
+  padding: 16rpx 0;
+  margin-bottom: 16rpx;
+
+  .status-tab {
+    flex: 1;
+    text-align: center;
+    padding: 12rpx 8rpx;
+    font-size: 24rpx;
+    color: #666;
+    background: #fff;
+    border-radius: 30rpx;
+
+    &.active {
+      background: #8A6A10;
+      color: #fff;
+      font-weight: 500;
+    }
+  }
 }
 
 .check-list {
@@ -541,6 +655,13 @@ onMounted(() => {
     font-size: 28rpx;
     color: #999;
   }
+}
+
+.load-more {
+  text-align: center;
+  padding: 30rpx 0;
+  font-size: 24rpx;
+  color: #999;
 }
 
 .create-bar {

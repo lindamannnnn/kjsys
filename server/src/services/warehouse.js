@@ -26,8 +26,14 @@ const DEFAULT_CODE = 'peijian'
 
 /**
  * 把前端传来的仓库标识统一解析成数据库 id
+ *
+ * ⚠️ 整改（V3 测试 P1-4）：原来「纯数字一律直接当 id 返回」，不做存在性校验，
+ *   于是 `material.upsert {warehouse_id: 999}` 能建出「不属于任何仓库」的孤儿物料，
+ *   统计口径被污染、前端列表也点不开。现在两条分支都必须查到真实存在的仓库，
+ *   查不到一律返回 null（由调用方报错），所有入口共用这一个函数。
+ *
  * @param {string|number} value 'peijian' / 'chengpin' / 1 / 2
- * @returns {Promise<number|null>}
+ * @returns {Promise<number|null>} 仓库不存在时返回 null
  */
 async function resolveWarehouseId(value) {
   if (value === null || value === undefined || value === '') return null
@@ -35,16 +41,11 @@ async function resolveWarehouseId(value) {
   const s = String(value).trim()
   if (!s) return null
 
-  // 纯数字：直接当 id
-  if (/^\d+$/.test(s)) {
-    return Number(s)
-  }
+  // 纯数字：当 id 用；否则当 code 查。两种都必须确认仓库真实存在且未删除
+  const row = /^\d+$/.test(s)
+    ? await queryOne('SELECT id FROM warehouses WHERE id = ? AND is_deleted = 0 LIMIT 1', [Number(s)])
+    : await queryOne('SELECT id FROM warehouses WHERE code = ? AND is_deleted = 0 LIMIT 1', [s])
 
-  // 否则按 code 查
-  const row = await queryOne(
-    'SELECT id FROM warehouses WHERE code = ? AND is_deleted = 0 LIMIT 1',
-    [s]
-  )
   return row ? row.id : null
 }
 

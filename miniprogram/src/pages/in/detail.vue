@@ -4,7 +4,8 @@
     <view class="card">
       <view class="card-header">
         <text class="order-no">{{ order.order_no }}</text>
-        <text class="order-amount">¥{{ order.total_price }}</text>
+        <!-- 金额：后端 inbound.detail 只对「成品仓」单据向仓管脱敏，配件仓保留 -->
+        <text v-if="order.total_price != null" class="order-amount">¥{{ order.total_price }}</text>
       </view>
       <view class="card-body">
         <view class="info-row">
@@ -42,7 +43,9 @@
           class="info-row"
         >
           <text class="label">{{ it.material_name }}{{ it.material_spec ? ' / ' + it.material_spec : '' }}</text>
-          <text class="value highlight">{{ it.quantity }} {{ it.unit }} × ¥{{ it.unit_price }} = ¥{{ it.total_price }}</text>
+          <!-- 单价 / 小计：成品仓单据对仓管不下发（配件仓正常显示） -->
+          <text v-if="it.unit_price != null || it.total_price != null" class="value highlight">{{ it.quantity }} {{ it.unit }} × ¥{{ formatMoney(it.unit_price) }} = ¥{{ formatMoney(it.total_price) }}</text>
+          <text v-else class="value">{{ it.quantity }} {{ it.unit }}</text>
         </view>
         <view v-if="!(order.items || []).length" class="info-row">
           <text class="label">明细</text>
@@ -95,6 +98,11 @@
       </button>
     </view>
 
+    <!-- 取消此单：待确认 + 本人/管理角色（还没动库存，随时可撤无副作用） -->
+    <view v-if="canCancel" class="action-bar">
+      <button class="btn-cancel" @click="onCancelOrder">取消此单</button>
+    </view>
+
     <!-- 改价弹层：多明细逐项改，避免整单被覆盖成同一个价 -->
     <view v-if="priceVisible" class="mask" @click="priceVisible = false">
       <view class="sheet" @click.stop="noop">
@@ -106,7 +114,7 @@
             <view class="price-main">
               <text class="price-name">{{ it.material_name }}</text>
               <text class="price-sub">
-                数量 {{ it.quantity }} {{ it.unit }} · 原价 ¥{{ it.origin_price }}
+                数量 {{ it.quantity }} {{ it.unit }} · 原价 ¥{{ formatMoney(it.origin_price) }}
               </text>
             </view>
             <input
@@ -135,8 +143,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { formatDate } from '@/utils/format'
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import { formatDate, formatMoney } from '@/utils/format'
 import { inboundApi } from '@/utils/api'
 import { useUserStore } from '@/store/user'
 
@@ -144,6 +153,7 @@ const userStore = useUserStore()
 
 const order = ref({})
 const canEditPrice = ref(false)
+const canCancel = ref(false)
 const orderId = ref('')
 
 /* ---------- 改价弹层 ---------- */
@@ -159,18 +169,47 @@ async function loadDetail() {
     const res = await inboundApi.detail({ id: orderId.value })
     order.value = res || {}
 
-    const isManager = userStore.hasRole(['boss', 'admin'])
+    // 2026-10-09 老板只读：入库单的改价/撤销不再给老板
+    const isManager = userStore.hasRole(['admin'])
     // 身份比对与后端一致：openid 优先，账号密码登录时退回用户名
     const isOwnOrder = !!userStore.identity && order.value.operator_openid === userStore.identity
     const isToday = new Date(order.value.created_at).toDateString() === new Date().toDateString()
 
     // 待确认：本人当天可改（管理不限当天）；已确认：只有老板/管理员能改
-    canEditPrice.value =
+    // 金额都看不到的单据（成品仓对仓管脱敏）不给改价入口，避免「盲改」
+    const priceVisibleHere = order.value.total_price != null
+    canEditPrice.value = priceVisibleHere && (
       (order.value.status === 'pending' && (isManager || (isOwnOrder && isToday))) ||
       (order.value.status === 'confirmed' && isManager)
+    )
+
+    // 待确认 + 本人/管理 → 可取消（不限时，与服务端一致：pending 撤单无副作用）
+    canCancel.value = order.value.status === 'pending' && (isOwnOrder || isManager)
   } catch (err) {
     uni.showToast({ title: err.message || '加载失败', icon: 'none' })
   }
+}
+
+/** 取消此单（待确认）：确认弹窗可填原因 */
+function onCancelOrder() {
+  uni.showModal({
+    title: '取消此单',
+    editable: true,
+    placeholderText: '取消原因（选填）',
+    confirmText: '取消此单',
+    cancelText: '再想想',
+    confirmColor: '#e74c3c',
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        await inboundApi.cancel({ id: orderId.value, reason: String(res.content || '').trim() })
+        uni.showToast({ title: '已取消', icon: 'success' })
+        loadDetail()
+      } catch (err) {
+        uni.showToast({ title: err.message || '取消失败', icon: 'none', duration: 3000 })
+      }
+    }
+  })
 }
 
 function onEditPrice() {
@@ -227,10 +266,10 @@ async function submitPrice() {
   }
 }
 
-onMounted(() => {
-  const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1]
-  orderId.value = currentPage.$page?.options?.id || ''
+// 页面参数必须用 uni-app 的 onLoad 拿：getCurrentPages().$page.options 在
+// 微信小程序端拿不到 id（H5 能拿到），导致详情页数据全空、按钮不显示（V4 实测踩坑）
+onLoad((options) => {
+  orderId.value = (options && options.id) || ''
   loadDetail()
 })
 </script>
@@ -300,6 +339,20 @@ onMounted(() => {
   .btn-edit {
     background: #0B4F95;
     color: #fff;
+    border-radius: 12rpx;
+    padding: 24rpx;
+    font-size: 30rpx;
+    width: 100%;
+
+    &::after {
+      border: none;
+    }
+  }
+
+  .btn-cancel {
+    background: #fff;
+    color: #e74c3c;
+    border: 1rpx solid #f5c6c0;
     border-radius: 12rpx;
     padding: 24rpx;
     font-size: 30rpx;

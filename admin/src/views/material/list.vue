@@ -69,14 +69,21 @@
       </template>
 
       <el-table :data="materialList" style="width: 100%" v-loading="loading">
-        <!-- 编号只有配件仓有（成品仓按车间分，不编号），锁定成品仓时这一列没意义就藏起来 -->
-        <el-table-column
-          v-if="showNoColumn"
-          prop="material_no"
-          label="编号"
-          width="90"
-          sortable
-        />
+        <!-- 编号：配件仓是货位编号、成品仓是预定编号，两仓都要显示 -->
+        <el-table-column prop="material_no" label="编号" width="90" sortable />
+        <el-table-column label="照片" width="80">
+          <template #default="{ row }">
+            <el-image
+              v-if="row.image_fileid"
+              :src="fullFileUrl(row.image_fileid)"
+              :preview-src-list="[fullFileUrl(row.image_fileid)]"
+              fit="cover"
+              preview-teleported
+              style="width: 44px; height: 44px; border-radius: 6px;"
+            />
+            <span v-else class="muted-text">—</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="name" label="物料名称" min-width="140" />
         <el-table-column prop="spec" label="规格型号" min-width="100" />
         <el-table-column prop="category" label="分类" width="100" />
@@ -99,12 +106,13 @@
           </template>
         </el-table-column>
         <el-table-column prop="warning_stock" label="预警库存" width="100" />
-        <el-table-column prop="avg_cost" label="成本价" width="100">
+        <!-- 成本价 / 库存价值：仓管端不展示（后端已脱敏，见 constants/roles.js canViewCost） -->
+        <el-table-column v-if="canSeeCost" prop="avg_cost" label="成本价" width="100">
           <template #default="{ row }">
             ¥{{ Number(row.avg_cost || 0).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="stock_value" label="库存价值" width="120">
+        <el-table-column v-if="canSeeCost" prop="stock_value" label="库存价值" width="120">
           <template #default="{ row }">
             ¥{{ (Number(row.avg_cost || 0) * Number(row.current_stock || 0)).toFixed(2) }}
           </template>
@@ -147,7 +155,18 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { materialApi, warehouseApi, exportApi } from '@/api'
+import { materialApi, warehouseApi, exportApi, fullFileUrl } from '@/api'
+import { canViewCost } from '@/constants/roles'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+
+/**
+ * 成本价 / 库存价值是否展示（2026-10-10）
+ * 仓管端只看数量、不看钱 —— 成品仓 / 配件仓的物料列表都不给这两列。
+ * 后端 material.list 对仓管也已脱敏，这里是「不显示空列」的体验层。
+ */
+const canSeeCost = computed(() => canViewCost(userStore.roles || []))
 
 const route = useRoute()
 const router = useRouter()
@@ -217,9 +236,6 @@ const subCategoryLabel = computed(() => {
   return '细分类'
 })
 
-/** 成品仓不显示编号列（它按车间分，本来就没编号） */
-const showNoColumn = computed(() => effectiveWarehouseCode.value !== 'chengpin')
-
 /** 导出文件名：锁定仓时带上仓库名，免得两个仓导出的文件分不清 */
 const exportFileName = computed(() => {
   const prefix = isLockedWarehouse.value && lockedWarehouse.value
@@ -228,10 +244,12 @@ const exportFileName = computed(() => {
   return `${prefix}物料列表_${dayjs().format('YYYYMMDD_HHmm')}.csv`
 })
 
-/** 导出表头：细分类那一列跟着仓库叫「车间」或「编号分类」 */
+/** 导出表头：细分类那一列跟着仓库叫「车间」或「编号分类」；成本价列对仓管不下发 */
 const exportHeaders = computed(() => [
   '编号', '物料名称', '规格型号', '分类', subCategoryLabel.value, '仓库',
-  '单位', '当前库存', '预警库存', '成本价', '备注'
+  '单位', '当前库存', '预警库存',
+  ...(canSeeCost.value ? ['成本价'] : []),
+  '备注'
 ])
 
 /** 当前页面对应的仓库编码，用于新增/导入时带过去 */
@@ -322,9 +340,12 @@ async function handleExport() {
         showWarningOnly: searchForm.value.showWarningOnly || undefined
       },
       filename: exportFileName,
+      // 列顺序与 exportHeaders 一一对应，成本价列跟随 canSeeCost 增减
       columns: [
         'material_no', 'name', 'spec', 'category', 'sub_category', 'warehouse_name', 'unit',
-        'current_stock', 'warning_stock', 'avg_cost', 'remark'
+        'current_stock', 'warning_stock',
+        ...(canSeeCost.value ? ['avg_cost'] : []),
+        'remark'
       ],
       headers: exportHeaders.value
     })

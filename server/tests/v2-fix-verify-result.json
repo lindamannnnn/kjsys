@@ -1,0 +1,52 @@
+{
+  "时间": "2026-10-03T11:14:23.182Z",
+  "通过": 9,
+  "总数": 9,
+  "明细": [
+    {
+      "name": "A1 单价填 0 被拦",
+      "pass": true,
+      "detail": "entry(unit_price:0) → code=400 message=每一项的实际单价都必须大于 0（采购成本要按它计算）"
+    },
+    {
+      "name": "A2 对照：单价填正常值必须通过",
+      "pass": true,
+      "detail": "entry(unit_price:12.5) → code=0 message=已提交，等待仓管收货入库"
+    },
+    {
+      "name": "B1 老板授予「管理员」被拦",
+      "pass": true,
+      "detail": "王总 updateRole(roles:[\"admin\"]) → code=403 message=只有「管理员」才能授予「管理员」角色，请联系系统管理员操作"
+    },
+    {
+      "name": "B2 对照：管理员授予「管理员」必须通过",
+      "pass": true,
+      "detail": "管理員 updateRole(roles:[\"admin\"]) → code=0 message=角色已更新"
+    },
+    {
+      "name": "B3 还原后角色回原值",
+      "pass": true,
+      "detail": "还原后 roles=[\"purchase\"]（原值 [\"purchase\"]）"
+    },
+    {
+      "name": "C1 overview 返回 picking_outbound / receiving_outbound",
+      "pass": true,
+      "detail": "picking_outbound=1 receiving_outbound=1"
+    },
+    {
+      "name": "D1 领料员提「报废」单被拦",
+      "pass": true,
+      "detail": "张三 submit(type:baofei) → code=403 message=领料员只能提交「领用」类型的出库单；报废、销售等请找仓管或老板开单"
+    },
+    {
+      "name": "D2 对照：仓管提「报废」单必须通过",
+      "pass": true,
+      "detail": "赵六 submit(type:baofei) → code=0 message=领料单已提交，等待仓管确认拣货"
+    },
+    {
+      "name": "E1 仓管 myTodoCount 返回待收料数",
+      "pass": true,
+      "detail": "赵六 myTodoCount → {\"can_take\":0,\"in_progress\":1,\"waiting_receive\":1,\"total\":1}"
+    }
+  ]
+}

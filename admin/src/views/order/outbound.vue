@@ -8,7 +8,9 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="全部状态" clearable>
             <el-option label="待确认" value="pending" />
-            <el-option label="已确认" value="confirmed" />
+            <el-option label="待拣货" value="picking" />
+            <el-option label="待收货" value="receiving" />
+            <el-option label="已完成" value="completed" />
             <el-option label="已驳回" value="rejected" />
             <el-option label="已作废" value="cancelled" />
           </el-select>
@@ -32,6 +34,12 @@
           <el-button type="primary" @click="handleSearch">搜索</el-button>
           <el-button @click="resetSearch">重置</el-button>
           <el-button type="success" :loading="exporting" @click="handleExport">导出 CSV</el-button>
+          <!-- 新建出库单：厂长（成品仓出库）与管理员；仓管在小程序里也没有这个入口 -->
+          <el-button
+            v-if="canCreate"
+            type="warning"
+            @click="$router.push('/order/outbound-create')"
+          >新建出库单</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -70,11 +78,11 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="230" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button
-              v-if="row.status === 'pending'"
+              v-if="row.status === 'pending' && canConfirmRole"
               type="success"
               size="small"
               @click="handleConfirm(row)"
@@ -82,7 +90,23 @@
               确认
             </el-button>
             <el-button
-              v-if="row.status === 'pending'"
+              v-if="row.status === 'picking' && canConfirmRole"
+              type="primary"
+              size="small"
+              @click="handlePickDone(row)"
+            >
+              拣货完成
+            </el-button>
+            <el-button
+              v-if="row.status === 'receiving' && canReceiveRole"
+              type="success"
+              size="small"
+              @click="handleReceive(row)"
+            >
+              代确认收货
+            </el-button>
+            <el-button
+              v-if="canReject(row)"
               type="danger"
               size="small"
               @click="handleReject(row)"
@@ -90,7 +114,7 @@
               驳回
             </el-button>
             <el-button
-              v-if="row.status === 'pending' || row.status === 'confirmed'"
+              v-if="canCancel(row)"
               type="warning"
               size="small"
               @click="handleCancel(row)"
@@ -123,6 +147,16 @@
         <el-descriptions-item label="操作员">{{ detail.operator_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
         <el-descriptions-item label="确认人">{{ detail.confirm_operator_name || '-' }}</el-descriptions-item>
+        <!-- V2 四阶段：拣货、收货各自留痕，否则出了事查不到是谁经手的 -->
+        <el-descriptions-item label="拣货人">{{ detail.pick_operator_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="拣货时间">{{ formatFull(detail.picked_at) }}</el-descriptions-item>
+        <el-descriptions-item label="收货人">{{ detail.receive_operator_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="收货时间">{{ formatFull(detail.received_at) }}</el-descriptions-item>
+        <el-descriptions-item label="库存扣减">
+          <el-tag :type="Number(detail.stock_deducted) === 1 ? 'success' : 'info'" size="small">
+            {{ Number(detail.stock_deducted) === 1 ? '已扣减' : '未扣减' }}
+          </el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="驳回原因">{{ detail.reject_reason || '-' }}</el-descriptions-item>
         <!-- 追责链要完整：提交人/确认人/驳回人都有，不能缺作废人（王总 P2-3-06） -->
         <el-descriptions-item label="作废人">{{ detail.cancel_operator_name || '-' }}</el-descriptions-item>
@@ -142,10 +176,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { outboundApi, warehouseApi, exportApi } from '@/api'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+
+/* ---------- 按角色显隐操作按钮（后端才是防线，这里只管「别让人点了才发现 403」） ---------- */
+function has(...names) {
+  const roles = userStore.roles || []
+  return names.some((n) => roles.includes(n))
+}
+/** 与后端 middleware/auth.js 的 operatorOf / identityOf 同口径：openid 优先，后台账号用 username */
+function myIdentity() {
+  const u = userStore.userInfo || {}
+  return u.openid || u.username || ''
+}
+// 确认 / 拣货完成：只给仓管与管理员
+const canConfirmRole = computed(() => has('storekeeper', 'admin'))
+// 代确认收货：领料员/采购/仓管/管理员/厂长都可以（厂长发起成品仓出库后由他确认）
+const canReceiveRole = computed(() => has('out', 'purchase', 'storekeeper', 'admin', 'director'))
+// 新建出库单：厂长（成品仓出库）+ 管理员（与小程序入口一致；仓管在小程序里也没有领料出库入口）
+const canCreate = computed(() => has('admin', 'director'))
 
 const loading = ref(false)
 const exporting = ref(false)
@@ -193,6 +247,9 @@ function typeTagType(type) {
 function statusText(status) {
   const map = {
     pending: '待确认',
+    picking: '待拣货',
+    receiving: '待收货',
+    completed: '已完成',
     confirmed: '已确认',
     rejected: '已驳回',
     cancelled: '已作废'
@@ -203,6 +260,9 @@ function statusText(status) {
 function statusTagType(status) {
   const map = {
     pending: 'warning',
+    picking: 'primary',
+    receiving: 'primary',
+    completed: 'success',
     confirmed: 'success',
     rejected: 'danger',
     cancelled: 'info'
@@ -212,6 +272,44 @@ function statusTagType(status) {
 
 function formatDate(date) {
   return date ? dayjs(date).format('MM-DD HH:mm') : '-'
+}
+
+/** 详情里带年份，跨年单据不至于看错 */
+function formatFull(date) {
+  return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-'
+}
+
+/** 驳回：待确认 / 待拣货 / 待收货 三个状态都能驳回（这三个状态下库存还没扣，不必回补） */
+function canReject(row) {
+  // outbound.reject 只放行 仓管/管理员 —— 老板、采购、厂长看到按钮点了就是 403
+  if (!has('storekeeper', 'admin')) return false
+  return ['pending', 'picking', 'receiving'].includes(row.status)
+}
+
+/** 撤销：进行中都能撤；已完成只有管理员能撤（撤了库存得回补） */
+function canCancel(row) {
+  const isAdmin = has('admin')
+  const isStorekeeper = has('storekeeper')
+  const isOwner = !!row.operator_openid && row.operator_openid === myIdentity()
+
+  // ⚠️ 这里必须和后端 outbound.cancel 的分档一一对应（那边没有 roleRules 条目，
+  //    唯一防线就是它内部那几个 if），否则按钮会「点得动但永远 403」：
+  //      pending   → 本人 或 管理员
+  //      picking   → 本人 或 仓管 或 管理员
+  //      receiving → 仓管 或 管理员（货已在交接，提交人不能自己撤）
+  //      completed → 仅管理员（会回补库存，属账目调整）
+  switch (row.status) {
+    case 'pending':
+      return isOwner || isAdmin
+    case 'picking':
+      return isOwner || isStorekeeper || isAdmin
+    case 'receiving':
+      return isStorekeeper || isAdmin
+    case 'completed':
+      return isAdmin
+    default:
+      return false
+  }
 }
 
 /** 一单含多个物料，列表页做聚合展示 */
@@ -346,7 +444,7 @@ async function handleConfirm(row) {
       type: 'warning'
     })
     await outboundApi.confirm({ id: row._id })
-    ElMessage.success('确认成功')
+    ElMessage.success('确认成功，已进入待拣货')
     loadOrders()
   } catch (err) {
     if (err !== 'cancel' && err !== 'close') {
@@ -355,10 +453,52 @@ async function handleConfirm(row) {
   }
 }
 
+/** 仓管拣完货 → 待收货，并通知领料员来收 */
+async function handlePickDone(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确认出库单「${row.order_no}」已拣货完成？确认后会通知领料员来收货。`,
+      '拣货完成',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+    await outboundApi.pickDone({ id: row._id })
+    ElMessage.success('已标记拣货完成，已通知领料员收货')
+    loadOrders()
+  } catch (err) {
+    if (err !== 'cancel' && err !== 'close') {
+      ElMessage.error(err.message || '操作失败')
+    }
+  }
+}
+
+/** 代领料员确认收货 —— 整个流程只有这一步真正扣库存 */
+async function handleReceive(row) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `代「${row.operator_name || '领料员'}」确认已收到出库单「${row.order_no}」的物料？确认后库存才会真正扣减，且不能再驳回。请填写代收说明：`,
+      '代确认收货',
+      {
+        confirmButtonText: '确认收货并扣减库存',
+        cancelButtonText: '取消',
+        type: 'warning',
+        inputPlaceholder: '例如：领料员本人已签字，由仓管代录',
+        inputValidator: (v) => (v && v.trim() ? true : '请填写代收说明，方便事后追查')
+      }
+    )
+    await outboundApi.receive({ id: row._id })
+    ElMessage.success(`已完成收货，库存已扣减（代收说明：${String(value).trim()}）`)
+    loadOrders()
+  } catch (err) {
+    if (err !== 'cancel' && err !== 'close') {
+      ElMessage.error(err.message || '收货失败')
+    }
+  }
+}
+
 async function handleReject(row) {
   try {
     const { value } = await ElMessageBox.prompt(
-      `确定驳回收库单「${row.order_no}」吗？驳回后库存将回补。`,
+      `确定驳回出库单「${row.order_no}」吗？驳回后领料员可修改重新提交；该单若已扣过库存会自动回补。`,
       '驳回出库单',
       {
         confirmButtonText: '确定驳回',
@@ -368,7 +508,7 @@ async function handleReject(row) {
       }
     )
     await outboundApi.reject({ id: row._id, reason: value })
-    ElMessage.success('已驳回，库存已回补')
+    ElMessage.success('已驳回')
     loadOrders()
   } catch (err) {
     if (err !== 'cancel' && err !== 'close') {
@@ -380,7 +520,7 @@ async function handleReject(row) {
 async function handleCancel(row) {
   try {
     const { value } = await ElMessageBox.prompt(
-      `撤销出库单「${row.order_no}」后，已扣的库存会回补。请填写作废原因：`,
+      `撤销出库单「${row.order_no}」后不可恢复；该单若已扣过库存会自动回补。请填写作废原因：`,
       '撤销出库单',
       {
         confirmButtonText: '确认撤销',
@@ -391,7 +531,7 @@ async function handleCancel(row) {
       }
     )
     await outboundApi.cancel({ id: row._id, reason: String(value || '').trim() })
-    ElMessage.success('撤销成功，库存已回补')
+    ElMessage.success('撤销成功')
     loadOrders()
   } catch (err) {
     if (err !== 'cancel' && err !== 'close') {

@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>出入库统计</span>
-          <el-radio-group v-model="days" size="small" @change="loadTrend">
+          <el-radio-group v-if="canTrend" v-model="days" size="small" @change="loadTrend">
             <el-radio-button :value="7">近 7 天</el-radio-button>
             <el-radio-button :value="30">近 30 天</el-radio-button>
             <el-radio-button :value="90">近 90 天</el-radio-button>
@@ -12,7 +12,7 @@
         </div>
       </template>
 
-      <el-row :gutter="20" v-loading="trendLoading">
+      <el-row v-if="canTrend" :gutter="20" v-loading="trendLoading">
         <el-col :span="12">
           <el-card shadow="never">
             <template #header>出库统计</template>
@@ -28,12 +28,16 @@
           </el-card>
         </el-col>
       </el-row>
+
+      <div v-if="!canTrend" class="trend-tip">
+        趋势汇总（出库/入库单数与金额）只有管理员能看。下面可以查你要的：单据流水、库存台账、仓库对比。
+      </div>
     </el-card>
 
     <el-card class="tab-card">
       <el-tabs v-model="activeTab">
-        <!-- 趋势明细 -->
-        <el-tab-pane label="出入库趋势" name="trend">
+        <!-- 趋势明细（仅管理员：stats.trend 只放行 admin） -->
+        <el-tab-pane label="出入库趋势" name="trend" v-if="canTrend">
           <el-table :data="trendList" style="width: 100%" v-loading="trendLoading">
             <el-table-column prop="date" label="日期" width="140" />
             <el-table-column prop="outbound_orders" label="出库单数" sortable />
@@ -59,7 +63,9 @@
             <el-form-item label="状态">
               <el-select v-model="flowQuery.status" placeholder="全部" clearable style="width: 120px">
                 <el-option label="待确认" value="pending" />
-                <el-option label="已确认" value="confirmed" />
+                <el-option label="待拣货" value="picking" />
+                <el-option label="待收货" value="receiving" />
+                <el-option label="已完成" value="completed" />
                 <el-option label="已驳回" value="rejected" />
                 <el-option label="已作废" value="cancelled" />
               </el-select>
@@ -95,7 +101,8 @@
             <el-table-column prop="order_no" label="单号" width="170" />
             <el-table-column prop="material_names" label="物料" show-overflow-tooltip />
             <el-table-column prop="total_qty" label="数量" width="90" sortable />
-            <el-table-column prop="total_amount" label="金额" width="110">
+            <!-- 金额：仓管端按行脱敏（配件仓入库单保留 / 成品仓不下发），整列无值时收起 -->
+            <el-table-column v-if="showFlowAmount" prop="total_amount" label="金额" width="110">
               <template #default="{ row }">
                 ¥{{ Number(row.total_amount || 0).toFixed(2) }}
               </template>
@@ -168,12 +175,13 @@
               </template>
             </el-table-column>
             <el-table-column prop="warning_stock" label="预警库存" width="100" />
-            <el-table-column prop="avg_cost" label="成本价" width="100">
+            <!-- 成本价 / 库存价值：仓管端不展示（后端 stats.stockList 已脱敏） -->
+            <el-table-column v-if="canSeeCost" prop="avg_cost" label="成本价" width="100">
               <template #default="{ row }">
                 ¥{{ Number(row.avg_cost || 0).toFixed(2) }}
               </template>
             </el-table-column>
-            <el-table-column prop="stock_value" label="库存价值" width="120" sortable>
+            <el-table-column v-if="canSeeCost" prop="stock_value" label="库存价值" width="120" sortable>
               <template #default="{ row }">
                 ¥{{ Number(row.stock_value || 0).toFixed(2) }}
               </template>
@@ -209,7 +217,8 @@
             <el-table-column prop="name" label="仓库名称" />
             <el-table-column prop="material_count" label="物料数" sortable />
             <el-table-column prop="total_stock" label="库存总量" sortable />
-            <el-table-column prop="total_value" label="库存价值" sortable>
+            <!-- 库存价值：仓管端不展示（后端 stats.warehouseSummary 已脱敏） -->
+            <el-table-column v-if="canSeeCost" prop="total_value" label="库存价值" sortable>
               <template #default="{ row }">
                 ¥{{ Number(row.total_value || 0).toLocaleString() }}
               </template>
@@ -267,8 +276,27 @@ import {
   warehouseApi,
   exportApi
 } from '@/api'
+import { useUserStore } from '@/store/user'
+import { canViewCost } from '@/constants/roles'
 
-const activeTab = ref('trend')
+const userStore = useUserStore()
+
+/**
+ * 「出入库趋势」用的是 stats.trend —— 后端**只放行 admin**（老板/厂长/仓管都没有）。
+ * 之前这里是所有人都在跑：非管理员一进来就弹「加载失败」+ 上面两张汇总卡永远是 0，
+ * 看着像系统坏了，其实是权限不够。
+ * 现在：非 admin 直接不显示趋势汇总与趋势 tab，默认落在「单据流水」（他们有权看）。
+ */
+const canTrend = computed(() => userStore.hasRole('admin'))
+
+/**
+ * 金额是否展示（2026-10-10）：仓管端只看数量、不看钱。
+ * ⚠️ 后端已脱敏（stats.stockList / warehouseSummary 对仓管不返回金额），
+ *    这里是体验层 —— 免得留下列头却是整列「¥0.00」。
+ */
+const canSeeCost = computed(() => canViewCost(userStore.roles || []))
+
+const activeTab = ref(canTrend.value ? 'trend' : 'orderFlow')
 const exporting = ref(false)
 
 /* ---------------- 趋势 ---------------- */
@@ -311,6 +339,14 @@ async function loadTrend() {
 /* ---------------- 单据流水 ---------------- */
 const flowLoading = ref(false)
 const flowList = ref([])
+
+/**
+ * 单据流水的「金额」列是否展示（2026-10-10）：**按数据判断** ——
+ * 后端 orderFlow 对仓管只脱敏成品仓单据，配件仓入库单金额保留（采购对账用），
+ * 所以配件仓管仍看得到该列，成品仓管看不到（整列无值 → 隐藏）。
+ */
+const showFlowAmount = computed(() => flowList.value.some((r) => r.total_amount != null))
+
 const flowTotal = ref(0)
 const flowPage = ref(1)
 const flowPageSize = ref(10)
@@ -370,7 +406,9 @@ async function exportOrderFlow() {
       params,
       filename: `单据流水_${dayjs().format('YYYYMMDD_HHmm')}.csv`,
       columns: [
-        'kind', 'order_no', 'material_names', 'total_qty', 'total_amount',
+        'kind', 'order_no', 'material_names', 'total_qty',
+        // 金额列跟随页面展示逻辑（成品仓管整列无值时一并去掉，免得导出空列）
+        ...(canSeeCost.value || showFlowAmount.value ? ['total_amount'] : []),
         'warehouse_name', 'operator_name', 'status', 'created_at'
       ]
     })
@@ -434,7 +472,9 @@ async function exportStockList() {
       filename: `库存台账_${dayjs().format('YYYYMMDD_HHmm')}.csv`,
       columns: [
         'name', 'spec', 'category', 'warehouse_name', 'unit',
-        'current_stock', 'warning_stock', 'avg_cost', 'stock_value'
+        'current_stock', 'warning_stock',
+        // 成本价 / 库存价值：仓管端不导出（后端 stats.stockList 已脱敏）
+        ...(canSeeCost.value ? ['avg_cost', 'stock_value'] : [])
       ]
     })
     ElMessage.success(`已导出 ${r.count} 条`)
@@ -515,7 +555,12 @@ async function exportWarehouse() {
       module: 'stats',
       action: 'warehouseSummary',
       filename: `仓库汇总_${dayjs().format('YYYYMMDD_HHmm')}.csv`,
-      columns: ['code', 'name', 'material_count', 'total_stock', 'total_value', 'warning_count']
+      // 库存价值：仓管端不导出（后端 stats.warehouseSummary 已脱敏）
+      columns: [
+        'code', 'name', 'material_count', 'total_stock',
+        ...(canSeeCost.value ? ['total_value'] : []),
+        'warning_count'
+      ]
     })
     ElMessage.success(`已导出 ${r.count} 条`)
   } catch (err) {
@@ -527,12 +572,28 @@ async function exportWarehouse() {
 
 /* ---------------- 通用 ---------------- */
 function orderStatusText(status) {
-  const map = { pending: '待确认', confirmed: '已确认', rejected: '已驳回', cancelled: '已作废' }
+  const map = {
+    pending: '待确认',
+    picking: '待拣货',
+    receiving: '待收货',
+    completed: '已完成',
+    confirmed: '已确认',
+    rejected: '已驳回',
+    cancelled: '已作废'
+  }
   return map[status] || status
 }
 
 function orderStatusTagType(status) {
-  const map = { pending: 'warning', confirmed: 'success', rejected: 'danger', cancelled: 'info' }
+  const map = {
+    pending: 'warning',
+    picking: 'primary',
+    receiving: 'primary',
+    completed: 'success',
+    confirmed: 'success',
+    rejected: 'danger',
+    cancelled: 'info'
+  }
   return map[status] || 'info'
 }
 
@@ -555,7 +616,8 @@ async function loadBasics() {
 }
 
 onMounted(() => {
-  loadTrend()
+  // 非管理员不调 stats.trend，免得一进页面就弹 403 的「加载失败」
+  if (canTrend.value) loadTrend()
   loadOrderFlow()
   loadStockList()
   loadWarehouseSummary()
@@ -572,6 +634,15 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 非管理员看到趋势区被收起来时的说明（不然页面上部会莫名其妙空一块） */
+.trend-tip {
+  font-size: 13px;
+  color: #909399;
+  background: #f4f4f5;
+  border-radius: 4px;
+  padding: 10px 14px;
 }
 
 .stat-value {

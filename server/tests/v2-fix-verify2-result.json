@@ -1,0 +1,37 @@
+{
+  "时间": "2026-10-03T11:16:46.294Z",
+  "通过": 6,
+  "总数": 6,
+  "明细": [
+    {
+      "name": "F1 approve 传 \"yes\" 不会被当成「通过」",
+      "pass": true,
+      "detail": "review(approve:\"yes\") → code=0 message=已退回，库存未做任何调整，请重新盘点后再提交（期望走「退回」分支）"
+    },
+    {
+      "name": "F2 对照：approve 传 true 必须通过",
+      "pass": true,
+      "detail": "review(approve:true) → code=0 message=审核完成，账实相符，无需调整"
+    },
+    {
+      "name": "F3 差异为 0 时库存未被改动",
+      "pass": true,
+      "detail": "审核后库存 = 85（期望 85）"
+    },
+    {
+      "name": "G1 老板作废「已完成」单被拦",
+      "pass": true,
+      "detail": "王总 cancel(completed 单) → code=403 message=该单据已完成出库，作废会回补库存；如需作废请联系系统管理员"
+    },
+    {
+      "name": "G2 对照：管理员作废必须成功",
+      "pass": true,
+      "detail": "管理员 cancel(completed 单) → code=0 message=已作废，库存已回补"
+    },
+    {
+      "name": "G3 作废后库存已正确回补",
+      "pass": true,
+      "detail": "作废后库存 = 85（应回到 85，即收货扣的 1 个已回补）"
+    }
+  ]
+}

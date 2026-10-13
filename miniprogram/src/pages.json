@@ -41,6 +41,14 @@
       }
     },
     {
+      "path": "pages/out/scrap",
+      "style": {
+        "navigationBarTitleText": "报废申请",
+        "navigationBarBackgroundColor": "#c0392b",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
       "path": "pages/out/history",
       "style": {
         "navigationBarTitleText": "出库历史",
@@ -113,14 +121,6 @@
       }
     },
     {
-      "path": "pages/boss/trend",
-      "style": {
-        "navigationBarTitleText": "趋势分析",
-        "navigationBarBackgroundColor": "#8A6A10",
-        "navigationBarTextStyle": "white"
-      }
-    },
-    {
       "path": "pages/boss/stock",
       "style": {
         "navigationBarTitleText": "库存台账",
@@ -153,26 +153,34 @@
       }
     },
     {
-      "path": "pages/purchase/submit",
+      "path": "pages/my/password",
       "style": {
-        "navigationBarTitleText": "采购入库",
-        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTitleText": "修改密码",
+        "navigationBarBackgroundColor": "#1a1a2e",
         "navigationBarTextStyle": "white"
       }
     },
     {
-      "path": "pages/purchase/history",
+      "path": "pages/purchase/tasks",
       "style": {
-        "navigationBarTitleText": "采购入库历史",
-        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTitleText": "采购任务",
+        "navigationBarBackgroundColor": "#C0392B",
         "navigationBarTextStyle": "white"
       }
     },
     {
-      "path": "pages/purchase/detail",
+      "path": "pages/purchase/task-create",
       "style": {
-        "navigationBarTitleText": "采购入库详情",
-        "navigationBarBackgroundColor": "#0B4F95",
+        "navigationBarTitleText": "发布采购任务",
+        "navigationBarBackgroundColor": "#C0392B",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/purchase/task-detail",
+      "style": {
+        "navigationBarTitleText": "采购任务详情",
+        "navigationBarBackgroundColor": "#C0392B",
         "navigationBarTextStyle": "white"
       }
     },

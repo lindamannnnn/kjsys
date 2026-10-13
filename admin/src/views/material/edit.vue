@@ -29,9 +29,14 @@
           </el-select>
         </el-form-item>
 
-        <!-- 编号：配件仓用（A001-7 这种），成品仓按车间分、不编号，所以成品仓下隐藏 -->
-        <el-form-item v-if="showMaterialNo" :label="subCategoryLabel + '编号'">
-          <el-input v-model="form.material_no" placeholder="如 A001-7（同仓库下不可重复）" />
+        <!-- 编号：配件仓是货位编号（A001-7），成品仓是预定编号 —— 两仓共用同一字段、都是选填。
+             成品仓语义：不填 = 标准产品，填写 = 已经预定出去的产品。
+             因此「同物料 + 同规格」只要编号不同就可各占一条记录（判重口径见后端 material.upsert）。 -->
+        <el-form-item :label="materialNoLabel">
+          <el-input v-model="form.material_no" :placeholder="materialNoPlaceholder" />
+          <div v-if="isChengpin" class="tip">
+            选填。不填编号 = 标准产品；填写编号 = 已经预定出去的产品（同规格填不同编号会分成两条记录）
+          </div>
         </el-form-item>
 
         <el-form-item :label="subCategoryLabel">
@@ -66,9 +71,27 @@
           <el-input v-model="form.remark" type="textarea" placeholder="选填" />
         </el-form-item>
 
+        <el-form-item label="物料照片">
+          <div class="photo-row">
+            <el-button size="small" :loading="photoUploading" @click="choosePhoto">
+              {{ form.image_fileid ? '重新上传' : '上传照片' }}
+            </el-button>
+            <el-image
+              v-if="form.image_fileid"
+              class="photo-preview"
+              :src="fullFileUrl(form.image_fileid)"
+              :preview-src-list="[fullFileUrl(form.image_fileid)]"
+              fit="contain"
+              preview-teleported
+            />
+            <el-button v-if="form.image_fileid" size="small" type="danger" link @click="form.image_fileid = ''">移除</el-button>
+          </div>
+          <input ref="photoInput" type="file" accept="image/*" style="display:none" @change="onPhotoChange" />
+        </el-form-item>
+
         <el-form-item v-if="isEdit">
           <span class="tip">
-            当前库存：{{ detail.current_stock }} {{ form.unit }}　成本价：¥{{ Number(detail.avg_cost || 0).toFixed(2) }}
+            当前库存：{{ detail.current_stock }} {{ form.unit }}<template v-if="canSeeCost">　成本价：¥{{ Number(detail.avg_cost || 0).toFixed(2) }}</template>
             （库存与成本由出入库自动维护）
           </span>
         </el-form-item>
@@ -86,10 +109,16 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { materialApi, warehouseApi } from '@/api'
+import { materialApi, warehouseApi, uploadFile, fullFileUrl } from '@/api'
+import { canViewCost } from '@/constants/roles'
+import { useUserStore } from '@/store/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
+
+/** 成本价是否展示：仓管端不展示（后端 material.detail 对仓管已脱敏） */
+const canSeeCost = computed(() => canViewCost(userStore.roles || []))
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -113,8 +142,18 @@ const subCategoryLabel = computed(() => {
   return '细分类'
 })
 
-/** 成品仓不编号，隐藏编号输入框 */
-const showMaterialNo = computed(() => currentWarehouseCode.value !== 'chengpin')
+/** 是否成品仓 */
+const isChengpin = computed(() => currentWarehouseCode.value === 'chengpin')
+
+/** 编号输入框标签：成品仓就叫「编号」，配件仓沿用「XX编号」 */
+const materialNoLabel = computed(() =>
+  isChengpin.value ? '编号' : subCategoryLabel.value + '编号'
+)
+
+/** 编号输入框占位提示：成品仓的编号=预定编号，语义与配件仓不同 */
+const materialNoPlaceholder = computed(() =>
+  isChengpin.value ? '选填（同仓库下不可重复）' : '如 A001-7（同仓库下不可重复）'
+)
 
 /** 列表页带过来的仓库编码：新增/保存后要回到同一个仓库的列表 */
 const backWarehouseCode = computed(() => String(route.query.warehouse_code || ''))
@@ -136,8 +175,30 @@ const form = ref({
   warehouse_id: '',
   unit: '个',
   warning_stock: 10,
-  remark: ''
+  remark: '',
+  image_fileid: ''
 })
+
+// 物料照片
+const photoInput = ref(null)
+const photoUploading = ref(false)
+function choosePhoto() {
+  photoInput.value && photoInput.value.click()
+}
+async function onPhotoChange(e) {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  photoUploading.value = true
+  try {
+    form.value.image_fileid = await uploadFile(file, 'materials')
+    ElMessage.success('照片已上传')
+  } catch (err) {
+    ElMessage.error(err.message || '上传失败')
+  } finally {
+    photoUploading.value = false
+    e.target.value = ''
+  }
+}
 
 async function loadBasics() {
   try {
@@ -192,7 +253,8 @@ async function loadDetail(id) {
       warehouse_id: d.warehouse_id || '',
       unit: d.unit || '个',
       warning_stock: Number(d.warning_stock || 0),
-      remark: d.remark || ''
+      remark: d.remark || '',
+      image_fileid: d.image_fileid || ''
     }
   } catch (err) {
     ElMessage.error(err.message || '加载物料详情失败')
@@ -221,7 +283,8 @@ async function handleSubmit() {
       unit: form.value.unit,
       warehouse_id: form.value.warehouse_id,
       warning_stock: form.value.warning_stock,
-      remark: form.value.remark
+      remark: form.value.remark,
+      image_fileid: form.value.image_fileid
     }
     if (form.value._id) payload._id = form.value._id
 
@@ -274,5 +337,18 @@ watch(
   font-size: 12px;
   color: #999;
   line-height: 1.6;
+}
+
+.photo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.photo-preview {
+  width: 96px;
+  height: 96px;
+  border-radius: 8px;
+  background: #f5f5f5;
 }
 </style>

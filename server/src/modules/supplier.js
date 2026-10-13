@@ -4,6 +4,7 @@
 const { query, queryOne, execute } = require('../db/pool')
 const { ok, fail } = require('../utils/response')
 const { toApi, toDbId, paging } = require('../utils/format')
+const { auditFromCtx } = require('../services/audit')
 
 /** 供应商列表 */
 async function list(ctx, data = {}) {
@@ -61,6 +62,11 @@ async function upsert(ctx, data = {}) {
         String(address || ''), String(remark || ''), id
       ]
     )
+    // 主数据改动留痕（V3 测试 P1-9：供应商资料改了完全不留痕）
+    await auditFromCtx(ctx, {
+      action: 'supplier_update', targetType: 'supplier', targetId: id,
+      detail: `修改供应商「${cleanName}」${contact ? `，联系人：${contact}` : ''}`
+    })
     return ok({ _id: id }, '更新成功')
   }
 
@@ -76,6 +82,12 @@ async function upsert(ctx, data = {}) {
       String(address || ''), String(remark || '')
     ]
   )
+  // 主数据改动留痕（V3 测试 P1-9）
+  await auditFromCtx(ctx, {
+    action: 'supplier_create', targetType: 'supplier', targetId: res.insertId,
+    detail: `新建供应商「${cleanName}」${contact ? `，联系人：${contact}` : ''}`
+  })
+
   return ok({ _id: res.insertId }, '创建成功')
 }
 
@@ -90,6 +102,13 @@ async function remove(ctx, data = {}) {
   )
 
   await execute('UPDATE suppliers SET is_deleted = 1 WHERE id = ?', [id])
+
+  // 主数据改动留痕（V3 测试 P1-9）
+  await auditFromCtx(ctx, {
+    action: 'supplier_delete', targetType: 'supplier', targetId: id,
+    detail: `删除供应商（关联入库单 ${used.c} 张${used.c > 0 ? '，予以保留' : ''}）`
+  })
+
   return ok(null, used.c > 0 ? `已停用（关联 ${used.c} 张入库单予以保留）` : '删除成功')
 }
 
@@ -121,8 +140,9 @@ module.exports = {
   name: 'supplier',
   publicActions: [],
   roleRules: {
-    upsert: ['boss', 'admin', 'purchase', 'storekeeper'],
-    delete: ['boss', 'admin']
+    // 2026-10-09：老板只读，供应商维护收回 boss
+    upsert: ['admin', 'purchase', 'storekeeper'],
+    delete: ['admin']
   },
   actions: { list, detail, upsert, delete: remove, search }
 }

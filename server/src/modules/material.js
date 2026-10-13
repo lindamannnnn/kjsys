@@ -14,6 +14,9 @@ const { ok, fail } = require('../utils/response')
 const { toApi, toDbId, num, paging } = require('../utils/format')
 const { warningStock } = require('../utils/validate')
 const { resolveWarehouseId } = require('../services/warehouse')
+const { auditFromCtx } = require('../services/audit')
+const { WARNING_COND } = require('../services/warning')
+const { isPureOutUser, maskStockFields, isCostHiddenUser, maskCostFields } = require('../middleware/auth')
 
 /** 库存类字段：这些字段只能由库存流水（入库单/盘点）改变，档案接口不得写入 */
 const STOCK_FIELDS = ['current_stock', 'avg_cost', 'stock', 'quantity']
@@ -47,8 +50,9 @@ async function list(ctx, data = {}) {
     where.push('m.sub_category = ?')
     params.push(subCategory)
   }
+  // 与看板/预警页同一套口径（原来这里写的是 `<=`，会把「刚好等于阈值」的料也算成预警）
   if (showWarningOnly) {
-    where.push('m.warning_stock > 0 AND m.current_stock <= m.warning_stock')
+    where.push(WARNING_COND)
   }
   if (keyword && String(keyword).trim()) {
     const kwRaw = String(keyword).trim()
@@ -91,6 +95,10 @@ async function list(ctx, data = {}) {
     [...params, pageSize, offset]
   )
 
+  // 两种脱敏互不冲突：领料员连数量都不给（maskStockFields），仓管只收成本价（maskCostFields）
+  if (isPureOutUser(ctx.user)) maskStockFields(rows)
+  else if (isCostHiddenUser(ctx.user)) maskCostFields(rows)
+
   return ok({
     list: toApi(rows),
     total: cnt.total,
@@ -117,6 +125,9 @@ async function detail(ctx, data = {}) {
     return fail(403, '该物料不属于你有权查看的仓库')
   }
 
+  if (isPureOutUser(ctx.user)) maskStockFields(row)
+  else if (isCostHiddenUser(ctx.user)) maskCostFields(row)
+
   return ok(toApi(row))
 }
 
@@ -140,8 +151,16 @@ async function upsert(ctx, data = {}) {
 
   if (!name || !String(name).trim()) return fail(400, '物料名称不能为空')
 
+  // 仓库必须真实存在（V3 测试 P1-4：原来传 999 也能建出「不属于任何仓库」的孤儿物料）
   const wid = await resolveWarehouseId(warehouseId)
-  if (!wid) return fail(400, '请选择所属仓库')
+  if (!wid) {
+    return fail(
+      400,
+      warehouseId === undefined || warehouseId === null || warehouseId === ''
+        ? '请选择所属仓库'
+        : '所选仓库不存在（可能已被删除），请刷新页面后重新选择'
+    )
+  }
   ctx.requireWarehouseAccess(wid, '该物料')
 
   const cleanName = String(name).trim()
@@ -158,16 +177,26 @@ async function upsert(ctx, data = {}) {
     // 原仓库也要有权限，防止把别仓物料"搬"过来
     ctx.requireWarehouseAccess(exist.warehouse_id, '该物料')
 
-    // 改名后是否与同仓库其它物料重名
-    const dup = await queryOne(
-      'SELECT id FROM materials WHERE name = ? AND spec = ? AND warehouse_id = ? AND is_deleted = 0 AND id <> ?',
-      [cleanName, cleanSpec, wid, id]
-    )
-    if (dup) return fail(409, '同仓库下已存在同名同规格物料，不能重复建档')
-
     // 编号：不传则保留原值（避免普通编辑把已录入的编号清掉）
     const finalNo =
       materialNo === undefined ? String(exist.material_no || '') : String(materialNo).trim()
+
+    // 判重口径：名称 + 规格 + 编号 三者全同才算重复。
+    // 成品仓里「同物料同规格、但编号不同」是两件不同的东西
+    // （不填编号 = 标准产品，填了编号 = 已经预定出去的产品），必须能各占一条记录。
+    const dup = await queryOne(
+      `SELECT id FROM materials
+        WHERE name = ? AND spec = ? AND material_no = ? AND warehouse_id = ? AND is_deleted = 0 AND id <> ?`,
+      [cleanName, cleanSpec, finalNo, wid, id]
+    )
+    if (dup) {
+      return fail(
+        409,
+        finalNo
+          ? `同仓库下已存在「同名 + 同规格 + 编号 ${finalNo}」的物料，不能重复建档`
+          : '同仓库下已存在同名同规格且未填编号的物料（不填编号视为标准产品，只会有一条），不能重复建档'
+      )
+    }
 
     if (finalNo) {
       const dupNo = await queryOne(
@@ -188,19 +217,36 @@ async function upsert(ctx, data = {}) {
         warningStock(warningStockValue, 10), String(imageFileid || ''), String(remark || ''), id
       ]
     )
+    // 主数据改动留痕（V3 测试 P1-9：原来改物料档案完全不写日志，出事查不到人）
+    await auditFromCtx(ctx, {
+      action: 'material_update', targetType: 'material', targetId: id,
+      detail:
+        `修改物料档案「${cleanName}」${cleanSpec ? `（规格 ${cleanSpec}）` : ''}；` +
+        `仓库 ${exist.warehouse_id} → ${wid}，预警库存 ${warningStock(warningStockValue, 10)}`
+    })
     return ok({ _id: id }, '更新成功（库存与成本不受档案修改影响）')
   }
 
   // ---------- 新增 ----------
+  const finalNo = String(materialNo || '').trim()
+
+  // 判重口径同上：名称 + 规格 + 编号 三者全同才算重复。
+  // 这样「同物料同规格、编号不同」可以各建一条；不填编号的只能有一条标准产品。
   const dup = await queryOne(
-    'SELECT id, current_stock FROM materials WHERE name = ? AND spec = ? AND warehouse_id = ? AND is_deleted = 0',
-    [cleanName, cleanSpec, wid]
+    `SELECT id, current_stock FROM materials
+      WHERE name = ? AND spec = ? AND material_no = ? AND warehouse_id = ? AND is_deleted = 0`,
+    [cleanName, cleanSpec, finalNo, wid]
   )
   if (dup) {
-    return fail(409, `该仓库已存在同名同规格物料（当前库存 ${dup.current_stock}），如需修改请直接编辑`)
+    return fail(
+      409,
+      finalNo
+        ? `该仓库已存在「同名 + 同规格 + 编号 ${finalNo}」的物料（当前库存 ${dup.current_stock}），如需修改请直接编辑`
+        : `该仓库已存在同名同规格且未填编号的物料（当前库存 ${dup.current_stock}）。`
+          + `若这条是已经预定出去的产品，请填写编号以区分；不填编号的只能有一条标准产品`
+    )
   }
 
-  const finalNo = String(materialNo || '').trim()
   if (finalNo) {
     const dupNo = await queryOne(
       'SELECT id FROM materials WHERE material_no = ? AND warehouse_id = ? AND is_deleted = 0',
@@ -220,6 +266,11 @@ async function upsert(ctx, data = {}) {
       warningStock(warningStockValue, 10), String(imageFileid || ''), String(remark || '')
     ]
   )
+
+  await auditFromCtx(ctx, {
+    action: 'material_create', targetType: 'material', targetId: res.insertId,
+    detail: `新建物料「${cleanName}」${cleanSpec ? `（规格 ${cleanSpec}）` : ''}，仓库 ${wid}，初始库存 0`
+  })
 
   return ok({ _id: res.insertId }, '创建成功（新物料库存为 0，请通过入库单建账）')
 }
@@ -268,9 +319,14 @@ async function importMaterials(ctx, data = {}) {
           continue
         }
 
+        const no = String(item.material_no || '').trim()
+
+        // 判重口径与 upsert 保持一致：名称 + 规格 + 编号 三者全同才算重复。
+        // 这样导入「同物料同规格、编号不同」的预定产品时不会互相顶掉。
         const dup = await queryOne(
-          'SELECT id, sub_category FROM materials WHERE name = ? AND spec = ? AND warehouse_id = ? AND is_deleted = 0',
-          [name, spec, wid],
+          `SELECT id, sub_category FROM materials
+            WHERE name = ? AND spec = ? AND material_no = ? AND warehouse_id = ? AND is_deleted = 0`,
+          [name, spec, no, wid],
           conn
         )
         if (dup) {
@@ -288,10 +344,10 @@ async function importMaterials(ctx, data = {}) {
 
         await execute(
           `INSERT INTO materials
-             (name, spec, category, sub_category, unit, warehouse_id, current_stock, warning_stock, avg_cost, is_deleted, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, 0, NOW(), NOW())`,
+             (name, spec, category, sub_category, material_no, unit, warehouse_id, current_stock, warning_stock, avg_cost, is_deleted, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 0, NOW(), NOW())`,
           [
-            name, spec, String(item.category || ''), String(item.sub_category || ''),
+            name, spec, String(item.category || ''), String(item.sub_category || ''), no,
             String(item.unit || '个'), wid,
             warningStock(item.warning_stock, 10)
           ],
@@ -307,6 +363,14 @@ async function importMaterials(ctx, data = {}) {
 
   const msg = `导入完成：新增 ${result.success}，补充细分类 ${result.updated}，跳过重复 ${result.skipped}，失败 ${result.failed}` +
     (result.success ? '（新物料库存为 0，需通过入库单建账）' : '')
+
+  // 批量导出的影响面比单条大得多，必须留痕（V3 测试 P1-9）
+  await auditFromCtx(ctx, {
+    action: 'material_import', targetType: 'material',
+    detail: `批量导入物料：${msg}` +
+      (result.failed ? `；失败项：${result.errors.slice(0, 5).map((e) => e.name).join('、')}` : '')
+  })
+
   return ok(result, msg)
 }
 
@@ -325,6 +389,11 @@ async function remove(ctx, data = {}) {
 
   const logCount = await queryOne('SELECT COUNT(*) AS c FROM stock_logs WHERE material_id = ?', [id])
   await execute('UPDATE materials SET is_deleted = 1 WHERE id = ?', [id])
+
+  await auditFromCtx(ctx, {
+    action: 'material_delete', targetType: 'material', targetId: id,
+    detail: `删除物料「${row.name}」${row.spec ? `（规格 ${row.spec}）` : ''}，仓库 ${row.warehouse_id}，历史流水 ${logCount.c} 条予以保留`
+  })
 
   return ok(null, logCount.c > 0
     ? `已停用该物料（历史流水 ${logCount.c} 条予以保留）`
@@ -356,16 +425,37 @@ async function categories(ctx, data = {}) {
     distinctColumn(ctx, 'category', data.warehouse_id),
     distinctColumn(ctx, 'sub_category', data.warehouse_id)
   ])
-  return ok({ list, subCategories })
+  // 大类 → 细分类 映射（建档时选完大类要能看到它下面已有的细分类）
+  const params = []
+  let mapSql = `SELECT DISTINCT m.category AS c, m.sub_category AS s FROM materials m
+                 WHERE m.is_deleted = 0 AND m.category <> '' AND m.sub_category <> ''`
+  const scope = ctx.warehouseScope('m', data.warehouse_id)
+  if (scope.sql) {
+    mapSql += ` ${scope.sql}`
+    params.push(...scope.params)
+  }
+  const pairs = await query(mapSql, params)
+  const subMap = {}
+  for (const p of pairs) {
+    if (!subMap[p.c]) subMap[p.c] = []
+    subMap[p.c].push(p.s)
+  }
+  for (const k of Object.keys(subMap)) subMap[k].sort()
+
+  return ok({ list, subCategories, subMap })
 }
 
 module.exports = {
   name: 'material',
   publicActions: [],
   roleRules: {
-    upsert: ['boss', 'admin', 'storekeeper'],
-    import: ['boss', 'admin'],
-    delete: ['boss', 'admin']
+    // 厂长（director）发采购单时会遇到「仓库里还没有的物料」，采购建单页的「＋新增」
+    // 要用到这个接口，故一并放行；upsert 已明确拒绝库存/成本字段（见文件头注释），
+    // 属于低风险的档案写入，不涉及资损
+    // 2026-10-09：老板只读，物料档案维护收回 boss
+    upsert: ['admin', 'storekeeper', 'director'],
+    import: ['admin'],
+    delete: ['admin']
   },
   actions: { list, detail, upsert, import: importMaterials, delete: remove, categories }
 }

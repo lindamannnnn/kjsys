@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-10-03T12:26:14.588Z",
+  "results": [
+    {
+      "id": "R1",
+      "title": "老板（非管理员）能否直接创建一个「管理员」账号",
+      "expected": "应被拒（只有管理员能授予管理员角色）",
+      "actual": "创建成功 code=0，新账号 id=57，角色 [\"admin\"]（已立即禁用）",
+      "verdict": "❌ 漏洞成立（P0）",
+      "evidence": "POST /api/user {action:\"create\"} by dev_boss → {\"code\":0,\"data\":{\"_id\":57},\"message\":\"账号创建成功\"}"
+    },
+    {
+      "id": "R2",
+      "title": "老板能否把系统管理员 admin 降级为普通员工",
+      "expected": "应被拒（不能剥夺别人/唯一管理员的 admin 角色）",
+      "actual": "源码结论：updateRole 只有「禁止授予自己不具备的 admin」这一道边界；「剥夺」方向无校验；且 isLastActiveManager 把 boss 也算作管理账号（MANAGEMENT_ROLES=[admin,boss]），所以只要系统里还有任一 boss 角色账号，保护就不触发 → 降级会成功",
+      "verdict": "❌ 漏洞成立（P0）· 未实际复现（见文末说明）",
+      "evidence": "源码 src/modules/user.js:144-190 + src/middleware/auth.js:93"
+    },
+    {
+      "id": "R3",
+      "title": "直接入库把单价填 0，系统是否拦住",
+      "expected": "应被拒（0 会让这批货入库成本变成 0，库存账失真；采购录入那边已经禁止 0）",
+      "actual": "提交成功 code=0（入库单 IN-20261003-014），已作废回退库存",
+      "verdict": "❌ 漏洞成立（P1）· 与 purchase.entry 的「单价必须>0」不一致",
+      "evidence": "POST /api/inbound {action:\"submit\", unit_price:0} → {\"code\":0,\"data\":{\"_id\":592,\"order_no\":\"IN-20261003-014\",\"total_price\":0},\"message\":\"入库单提交成功\"}"
+    },
+    {
+      "id": "R4",
+      "title": "仓管能否查看「本仓、别人（老板）创建」的盘点单",
+      "expected": "应该能（这一轮的 list 已修成仓管可见本仓全部，详情应该一致）",
+      "actual": "仓管可见盘点单 11 张；老板建的、仓管列表里看不到的有 0 张 → 仓管列表里没有「只有老板能见到」的盘点单，无法构造该场景",
+      "verdict": "⚠️ 未能构造",
+      "evidence": "源码 src/modules/check.js: assertCheckVisible 只对 boss/admin 放行，仓管需「自己创建或参与」"
+    },
+    {
+      "id": "R5",
+      "title": "新建物料时传一个不存在的仓库 id（999），系统是否拦住",
+      "expected": "应被拒（否则会产生不属于任何仓库的「孤儿物料」，污染统计）",
+      "actual": "创建成功 code=0（id=2118，warehouse_id=999），已删除",
+      "verdict": "❌ 漏洞成立（P1）",
+      "evidence": "POST /api/material {action:\"upsert\", warehouse_id:999} → {\"code\":0,\"data\":{\"_id\":2118},\"message\":\"创建成功（新物料库存为 0，请通过入库单建账）\"}"
+    },
+    {
+      "id": "R6",
+      "title": "同一物料分两行、每行 46 个（合计 92 > 库存 91）能否提交",
+      "expected": "应被拒（合计超库存）",
+      "actual": "提交成功 code=0（单号 OUT-20261003-037），已撤销",
+      "verdict": "❌ 漏洞成立（P1）：逐行校验而非合并校验，拆行可绕过",
+      "evidence": "POST /api/outbound {action:\"submit\"} 两行同物料各 46，库存仅 91"
+    }
+  ]
+}

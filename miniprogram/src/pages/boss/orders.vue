@@ -57,7 +57,7 @@
             <text>{{ item.kind === 'outbound' ? '出库' : '入库' }}</text>
           </view>
           <text class="order-no">{{ item.order_no }}</text>
-          <text class="order-time">{{ formatDate(item.created_at, 'MM-DD HH:mm') }}</text>
+          <text class="order-time">{{ formatDate(item.created_at, 'YYYY-MM-DD HH:mm') }}</text>
         </view>
         <view class="order-body">
           <text class="material-name">{{ shortNames(item.material_names) }}</text>
@@ -70,9 +70,9 @@
           <text class="operator">{{ item.operator_name }}</text>
           <view class="footer-actions">
             <text v-if="item.kind === 'inbound'" class="amount">¥{{ formatMoney(item.total_amount) }}</text>
-            <!-- 老板驳回/撤销按钮（待确认状态显示） -->
+            <!-- 老板驳回/撤销按钮（待确认状态显示；厂长只读，不显示） -->
             <text
-              v-if="item.status === 'pending'"
+              v-if="item.status === 'pending' && canReject"
               class="btn-reject"
               @click.stop="rejectOrder(item)"
             >{{ item.kind === 'outbound' ? '驳回' : '撤销' }}</text>
@@ -97,17 +97,29 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { onPageShow as onShow } from '@/utils/on-page-show'
 import { formatDate, formatMoney } from '@/utils/format'
 import { statsApi, outboundApi, inboundApi } from '@/utils/api'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+
+// 驳回出库单 / 作废入库单是老板的权限（outbound.reject / inbound.cancel 只放行 boss/admin）。
+// 厂长能看单据流水，但不能作废 —— 按钮对他隐藏，免得点了才报 403
+// 单据作废/驳回（2026-10-09 老板只读后收回 boss）：只剩管理员
+const canReject = computed(() => userStore.hasRole(['admin']))
 
 // 单据状态文本（与后端 status 取值一致）
+// 流程重构 V2：领料线多了 picking（待拣货）、receiving（待收货）两个环节
 function statusText(status) {
   const map = {
     'pending': '待确认',
+    'picking': '待拣货',
+    'receiving': '待收货',
     'confirmed': '已确认',
-    'cancelled': '已撤销',
+    'completed': '已完成',
+    'cancelled': '已作废',
     'rejected': '已驳回'
   }
   return map[status] || status || ''
@@ -131,6 +143,9 @@ const typeTabs = [
 const statusTabs = [
   { label: '全部状态', value: 'all' },
   { label: '待确认', value: 'pending' },
+  // 流程重构 V2：领料线新增「待拣货 / 待收货」，文案与 utils/api.js statusText 保持一致
+  { label: '待拣货', value: 'picking' },
+  { label: '待收货', value: 'receiving' },
   { label: '已确认', value: 'confirmed' },
   { label: '已驳回', value: 'rejected' }
 ]
@@ -375,6 +390,16 @@ onMounted(() => {
       &.pending {
         background: #fff3cd;
         color: #856404;
+      }
+
+      &.picking {
+        background: #efeaf7;
+        color: #5b4b8a;
+      }
+
+      &.receiving {
+        background: #d1ecf1;
+        color: #0c5460;
       }
 
       &.approved {

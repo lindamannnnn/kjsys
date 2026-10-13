@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6 岗位使用体感与优化空间 · 胜龙进销存</title>
+<style>
+  :root{
+    --bg:#070c16; --bg2:#0b1424; --panel:rgba(18,30,50,.72); --line:rgba(90,140,200,.18);
+    --txt:#e8f0fb; --txt2:#9fb3cc; --txt3:#6b819c;
+    --cyan:#2fd6e8; --blue:#3d8bfd; --green:#37d39b; --amber:#ffb020; --red:#ff5c5c; --purple:#a07bff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.7; padding:0 0 80px;
+    background-image:
+      radial-gradient(900px 500px at 12% -8%, rgba(61,139,253,.20), transparent 60%),
+      radial-gradient(800px 460px at 88% 4%, rgba(47,214,232,.14), transparent 62%),
+      radial-gradient(700px 400px at 50% 100%, rgba(160,123,255,.10), transparent 65%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  header{padding:56px 0 30px;border-bottom:1px solid var(--line);margin-bottom:34px}
+  .kicker{font-size:12px;letter-spacing:.34em;color:var(--cyan);text-transform:uppercase;margin-bottom:14px}
+  h1{font-size:34px;letter-spacing:.02em;font-weight:700;
+     background:linear-gradient(92deg,#eaf6ff,#7fd8ff 48%,#4aa8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--txt2);font-size:14px;margin-top:14px;max-width:820px}
+  .meta{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
+  .chip{font-size:12px;padding:4px 12px;border-radius:999px;border:1px solid var(--line);color:var(--txt2);background:rgba(255,255,255,.03)}
+  h2{font-size:21px;margin:44px 0 16px;padding-left:14px;border-left:3px solid var(--blue)}
+  h3{font-size:16px;margin:26px 0 10px;color:#cfe4ff}
+  p{color:var(--txt2);font-size:14.5px}
+  .concl{background:linear-gradient(135deg,rgba(47,214,232,.10),rgba(61,139,253,.06));
+         border:1px solid rgba(47,214,232,.28);border-radius:14px;padding:20px 22px;margin:22px 0}
+  .concl b{color:#8ff0ff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;
+        backdrop-filter:blur(8px);position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--c,var(--blue)),transparent);opacity:.9}
+  .card h4{font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .card .role{font-size:11px;font-family:var(--mono);color:var(--txt3);
+              border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+  .card .most{font-size:13.5px;color:#ffd79a;margin-top:10px}
+  .cnt{position:absolute;right:16px;top:14px;font-family:var(--mono);font-size:22px;color:rgba(255,255,255,.14)}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--txt3);font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+  td{color:var(--txt2)}
+  code{font-family:var(--mono);font-size:12.5px;color:#9fe3ff;background:rgba(47,214,232,.08);
+       border:1px solid rgba(47,214,232,.16);border-radius:5px;padding:1px 6px}
+  .ev{font-size:12.5px;color:var(--txt3);font-family:var(--mono);word-break:break-all}
+  .item{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:10px 0;background:rgba(255,255,255,.02)}
+  .item .head{display:flex;gap:10px;align-items:flex-start}
+  .badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;flex:none;margin-top:2px}
+  .p0{background:rgba(255,92,92,.16);color:#ff8f8f;border:1px solid rgba(255,92,92,.42)}
+  .p1{background:rgba(255,176,32,.14);color:#ffcb70;border:1px solid rgba(255,176,32,.38)}
+  .p2{background:rgba(150,170,200,.12);color:#a9bcd4;border:1px solid rgba(150,170,200,.28)}
+  .ok{background:rgba(55,211,155,.14);color:#6fe6b8;border:1px solid rgba(55,211,155,.36)}
+  .item .txt{font-size:14px}
+  .item .txt b{color:#fff}
+  .want{margin-top:8px;font-size:13px;color:#9ff2d8}
+  .want::before{content:"我想要 → ";color:var(--txt3)}
+  ul{padding-left:20px;color:var(--txt2);font-size:14px}
+  li{margin:6px 0}
+  li::marker{color:var(--cyan)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  @media(max-width:760px){.two{grid-template-columns:1fr}}
+  .foot{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);color:var(--txt3);font-size:12.5px}
+  .warnbox{background:rgba(255,176,32,.07);border:1px solid rgba(255,176,32,.28);border-radius:12px;padding:16px 18px;margin:18px 0;font-size:13.5px;color:#ffd79a}
+  .ask{background:rgba(160,123,255,.08);border:1px solid rgba(160,123,255,.3);border-radius:12px;padding:16px 18px;margin:16px 0}
+  .ask ol{margin:8px 0 0 18px;color:var(--txt2);font-size:14px}
+  .ask li{margin:8px 0}
+  .ask b{color:#d8c6ff}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">ShengLong ERP · UX Review</div>
+  <h1>6 岗位使用体感与优化空间</h1>
+  <p class="sub">让 6 个岗位「以真实使用者身份」走一遍自己的日常，把用起来不顺的地方记下来。每条结论都带源码行号或接口实测证据。</p>
+  <div class="meta">
+    <span class="chip">2026-10-09</span>
+    <span class="chip">微信小程序端</span>
+    <span class="chip">37 条摩擦点</span>
+    <span class="chip">8 条跨岗位共性</span>
+    <span class="chip">1 条 P0 · 15 条 P1</span>
+    <span class="chip" style="border-color:rgba(55,211,155,.4);color:#6fe6b8">✅ 已修复，见第十节</span>
+  </div>
+</header>
+
+<div class="concl">
+  <b>一句话结论：</b>功能是齐的、权限是对的，但「人找事」这件事没做好。抱怨最多的不是「做不到」，而是三类问题 ——
+  ① <b>有入口的地方点不动／点了没用</b>（假按钮、无效筛选、403 白干）；
+  ② <b>数据一多就只看得见前 100 条</b>，既翻不到也搜不到；
+  ③ <b>提醒到不了人</b>（被驳回、待收货、待审核全靠自己回首页看）。
+</div>
+
+<h2>各岗位最痛的一条</h2>
+<div class="grid">
+  <div class="card" style="--c:#37d39b"><span class="cnt">6</span>
+    <h4>领料员 <span class="role">out</span></h4>
+    <div class="most">登录直接被推进录入页，被驳回／待收货在录入页完全无感知</div></div>
+  <div class="card" style="--c:#2fd6e8"><span class="cnt">6</span>
+    <h4>采购员 <span class="role">purchase</span></h4>
+    <div class="most">一张单十几个料，要逐项重复填单价＋购买方式＋外部单号</div></div>
+  <div class="card" style="--c:#ffb020"><span class="cnt">9</span>
+    <h4>仓管 <span class="role">storekeeper</span></h4>
+    <div class="most">待办／库存／流水全是前 50~100 条，看不到也翻不到</div></div>
+  <div class="card" style="--c:#3d8bfd"><span class="cnt">7</span>
+    <h4>厂长 <span class="role">director</span></h4>
+    <div class="most">看板日期切换点了没反应；盘点审核入口藏得深</div></div>
+  <div class="card" style="--c:#a07bff"><span class="cnt">6</span>
+    <h4>老板 <span class="role">boss</span></h4>
+    <div class="most">预警页「通知采购」是假按钮，点了什么都没发生</div></div>
+  <div class="card" style="--c:#ff5c5c"><span class="cnt">3</span>
+    <h4>管理员 <span class="role">admin</span></h4>
+    <div class="most">小程序端没有审批入口，只能回 Web 后台</div></div>
+</div>
+
+<h2>一、领料员 out</h2>
+<p><b>我是谁</b>：车间来领料，我搜索物料、加进篮子、填数量、提交；等仓管备货后去收货。<br>
+<b>我走了一遍</b>：首页 → 领料出库 → 搜物料 → 加料填数 → 提交 → 拿单号 → 回首页看「待收货」。</p>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>被驳回、待收货，我在录入页看不到</b><div class="ev">落点 utils/role-home.js:13 → /pages/out/submit；提醒横幅只挂首页 pages/index/index.vue:96-117；登录后自动跳走 index.vue:390-398</div><div class="want">录入页顶部也给一条「2 张被驳回 / 3 张待收货」</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>搜索每敲一个字就发一次请求，没有防抖</b><div class="ev">out/submit.vue:12 @input=onSearch → :232-236 直接 loadMaterials()；而 boss/stock.vue:106-114、purchase/ledger.vue:113 都做了 300ms 防抖</div><div class="want">全站「搜物料」统一加防抖，2000 条物料下才不卡</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>没有「再来一单」</b><div class="ev">out/history.vue:44-60 明细卡只有单号/数量/状态，无「再领一次」</div><div class="want">历史单一键带回当时的物料与数量</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>数量清空后按钮变灰，但不告诉我为什么</b><div class="ev">out/submit.vue:372-375 + 提交校验 :218-226</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>待收货超过 6 张，第 7 张起从提醒点不进去</b><div class="ev">index.vue:261 list.slice(0,6)</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>出库历史不能按物料找单</b><div class="ev">out/history.vue:15-23 只有状态 tab</div></div></div></div>
+
+<h2>二、采购员 purchase</h2>
+<p><b>我是谁</b>：接到采购任务，跟供应商谈价、下单，货到做收料入库。</p>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>逐项录入强制三项，不能批量、不能套用</b><div class="ev">purchase/task-detail.vue:151-176 每项一组输入；:400-411 对每一项校验单价与购买方式</div><div class="want">「全部套用同一购买方式」＋单价可后补，或支持批量粘贴</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>「到货」点了就直接写入，没有二次确认</b><div class="ev">task-detail.vue:86 @click=onItemReceive → :438-463 只做数值校验直接提交，无弹窗</div><div class="want">至少弹一次「确认实到 12 件？」，填错要再改一轮很烦</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>任务列表不能按任务号／物料搜</b><div class="ev">purchase/tasks.vue:10-18 只有状态 tab；:118 固定 pageSize:50</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>到货那一行挤了「输入框+到货+退货+入库」四个控件</b><div class="ev">task-detail.vue:78-95，误点相邻按钮风险高</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>任务金额只在「已入库或金额&gt;0」时显示</b><div class="ev">purchase/tasks.vue:47，进行中的单看不到已录金额</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>「我的入库记录」名不副实</b><div class="ev">my/profile.vue:79-83 对所有人显示；后端 outbound.js:316 给采购员 canSeeAll=true，看到的是所有人的单</div></div></div></div>
+
+<h2>三、仓管 storekeeper <span class="badge p2" style="vertical-align:middle">全系统最重的岗位</span></h2>
+<p><b>我是谁</b>：收料入库、按领料单备货、收货核对、盘点。</p>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>待办单据每类只取 50 条，列表还不能上拉</b><div class="ev">storekeeper/pending.vue:266-271 四个请求都 pageSize:50；整个文件没有 onReachBottom/scrolltolower</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>本仓库存只显示前 100 个物料</b><div class="ev">storekeeper/stock.vue:118 pageSize:100，无上拉加载 —— 近 2000 条物料，不搜索就看不到全部</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>全部流水同样固定 100 条</b><div class="ev">storekeeper/orders.vue:187</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>盘点提交文案还在说「老板审核」，可老板已无审核权</b><div class="ev">check/submit.vue:213「提交后需由老板/管理员审核才改库存」vs 权限表 check.js:641-649 review: ['admin','director']</div><div class="want">改成「等待管理员/厂长审核」，别让我等错人</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>「其余按账面数填」一键批量、无确认，也不能反向清空</b><div class="ev">check/submit.vue:19 @click=fillRestWithBook → :147-161 直接遍历填入</div><div class="want">误点后能一键「清空重录」</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>采购批量入库页在 C 端根本进不去</b><div class="ev">pages.json:164 注册了 purchase/submit（带供应商选择器与档案维护），但全项目无任何 navigateTo 指向它；实际只能用单项面板 in/submit.vue:100-175（一次一个物料一个提交）</div><div class="want">同批到货能一次录多个料再一起提交</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>供应商是纯手打文本，没有选择框也没有历史</b><div class="ev">in/submit.vue:147-155 供应商为 input；反倒是那个进不去的 purchase/submit.vue:136-141 有</div><div class="want">可搜索下拉 + 记住历史，否则同一供应商写法五花八门，对账要命</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>我有改价权限，但详情页没有改价入口</b><div class="ev">后端 inbound.js roleRules updatePrice: ['admin','storekeeper']；前端 in/detail.vue:170 isManager=hasRole(['admin'])，按钮只对 admin 显示</div></div></div></div>
+
+<h2>四、厂长 director</h2>
+<p><b>我是谁</b>：发采购单、盘点、审盘点、看两个仓库的库存与金额。</p>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>看板顶部的「今天/本周/本月」是个装饰</b><div class="ev">boss/dashboard.vue:10 @click 只改本地变量；数据加载 :160-176 永远调 statsApi.overview()，不传周期也没 watch</div><div class="want">要么真按周期取数，要么先撤掉 —— 点了没反应比没有更伤信任</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>我登录后被丢在看板，但看板里没有「盘点/待审核」入口</b><div class="ev">role-home.js:17 director → boss/dashboard；快捷入口只给 库存台账/单据流水/预警/库存流水（boss/dashboard.vue:86-97）</div><div class="want">加一张「待我审核 N 张」的卡片，直接点进去</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>退回重盘不收集原因</b><div class="ev">check/detail.vue:166-186 onReview 只传 {id, approve}；而后端 check.js:466 其实支持 remark 入参</div><div class="want">退回时写一句「成品仓 3 项数量对不上」，盘点人才知道重盘哪里</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>盘点详情把「全部物料」当差异明细铺出来</b><div class="ev">check/detail.vue:40 标题「盘点差异明细」，列表 :49-73 对 check.items 全量 v-for</div><div class="want">默认只显示有差异的项，没差异的折叠</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>盘点列表没状态筛选、固定 100 条</b><div class="ev">check/list.vue:381 {page:1,pageSize:100}，页面无状态 tab，loadChecks 无上拉加载</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>没权限的角色也能进盘点页看到「提交」按钮，点了才 403</b><div class="ev">my/profile.vue:85-89 对所有人显示「盘点任务」；check/submit.vue:59-65 渲染提交按钮；权限表 check.submit: ['storekeeper','admin','director']</div></div></div></div>
+
+<h2>五、老板 boss</h2>
+<p><b>我是谁</b>：只看数、不做操作。</p>
+<div class="warnbox"><b>⚠️ 本报告里我最建议立刻改的一条</b><br>
+「通知采购」是假按钮（<code>boss/warning.vue:108-110</code> 只有一句 toast，没有任何接口调用）。<b>老板会真的以为采购已经收到通知了</b> —— 漏补货是业务损失，不是体验问题。</div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>看板日期切换无效</b>（与厂长同一个问题）<div class="ev">boss/dashboard.vue:10 + :163</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>预警固定 100 条，但顶部还显示总数</b><div class="ev">boss/warning.vue:96 pageSize:100，列表 :16-22 无上拉加载；:100 却显示 total —— 数字和列表对不上</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>消息没有稳定入口，红点容易漏</b><div class="ev">tabBar 只有「首页/我的」（pages.json），消息入口只在首页底部 index.vue:190-195，而登录后立刻自动跳看板（:390-398）</div><div class="want">底部 tab 加一个「消息」，或任意页面都能一眼看到红点</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>单据流水少了「待拣货/待收货」两个状态</b><div class="ev">boss/orders.vue:143-148 只有 全部/待确认/已确认/已驳回，系统状态含 picking/receiving（utils/api.js:137-154）</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>KPI「库存总量」没写单位</b><div class="ev">boss/dashboard.vue:152 —— 是「件」还是「项」？只能猜</div></div></div></div>
+
+<h2>六、管理员 admin</h2>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>小程序端没有审批入口</b><div class="ev">index.vue:119-186 首页角色卡按 out/purchase/storekeeper/boss+director 渲染，admin 只命中「库存流水」；boss/dashboard.vue:86-97 快捷入口只按 boss/director 给三项；而 user.approve/create/updateRole 只对 admin 开放，小程序端无对应页面</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p1">P1</span><div class="txt"><b>默认落点是看板，不是工作台</b><div class="ev">role-home.js:18 admin → boss/dashboard；而管理员最常用的「管人/管物料」在看板里一个都没有</div></div></div></div>
+<div class="item"><div class="head"><span class="badge p2">P2</span><div class="txt"><b>看板快捷入口对 admin 只剩「库存流水」一项</b><div class="ev">boss/dashboard.vue:88-96</div></div></div></div>
+<p style="margin-top:10px;font-size:13px;color:var(--txt3)">说明：管理员主战场是 Web 后台（功能齐全），所以这里只算 P1/P2；但「用了小程序就干不了活」仍是断链。</p>
+
+<h2>七、跨岗位共性问题（优先级最高的一组）</h2>
+<table>
+<thead><tr><th style="width:82px">级别</th><th style="width:210px">问题</th><th>证据</th><th style="width:120px">影响面</th></tr></thead>
+<tbody>
+<tr><td><span class="badge p0">P0</span></td><td><b>强制改密门禁没有对应页面，命中即锁死</b></td>
+<td class="ev">后端 app.js:197-204：must_change_password=1 时除改密/查自己外一律 403；而小程序端 grep changePassword 只有 utils/api.js:16 一处封装定义，my/profile.vue:198 只是日志文案，没有任何改密页面或入口</td><td>所有角色<br><span style="font-size:11.5px">触发条件：账号被后台重置过密码后又用小程序登录</span></td></tr>
+<tr><td><span class="badge p1">P1</span></td><td>多处列表固定 50/100 条且不能上拉加载</td>
+<td class="ev">storekeeper/pending.vue:266-271、storekeeper/stock.vue:118、storekeeper/orders.vue:187、check/list.vue:381、boss/warning.vue:96、purchase/tasks.vue:118</td><td>仓管/厂长/老板/采购</td></tr>
+<tr><td><span class="badge p1">P1</span></td><td>搜索防抖不统一</td>
+<td class="ev">有：boss/stock.vue:106-114、purchase/ledger.vue:113；无：out/submit.vue:12、in/submit.vue:13、storekeeper/stock.vue:21、check/list.vue:118</td><td>全部角色</td></tr>
+<tr><td><span class="badge p1">P1</span></td><td>有「注册了但没有任何入口」的死页面</td>
+<td class="ev">pages.json:164 purchase/submit、:196 purchase/history、:204 purchase/detail、:124 boss/trend —— 全项目找不到 navigateTo 指向</td><td>仓管/老板</td></tr>
+<tr><td><span class="badge p1">P1</span></td><td>提醒只能靠回首页看</td>
+<td class="ev">消息入口只在 index.vue:190-195，登录即自动跳工作台（:390-398），tabBar 无消息位</td><td>全部角色</td></tr>
+<tr><td><span class="badge p2">P2</span></td><td>「我的」页菜单对所有角色一模一样</td>
+<td class="ev">my/profile.vue:67「个人信息」点进去还是当前页；:79-83 记录类对多角色实为全部单据；:85-89「盘点任务」对无权限角色也显示</td><td>全部角色</td></tr>
+<tr><td><span class="badge p2">P2</span></td><td>金额格式不统一</td>
+<td class="ev">有封装 utils/format.js:36-39（千分位+2位），但 in/history.vue:33、purchase/tasks.vue:48、purchase/task-detail.vue:98 直接写 ¥{{ item.unit_price }}</td><td>全部角色</td></tr>
+<tr><td><span class="badge p2">P2</span></td><td>时间粒度不一致</td>
+<td class="ev">storekeeper/orders.vue:99-102 只到「月/日」，boss/orders.vue:60 到「MM-DD HH:mm」，out/history.vue:50 到「YYYY-MM-DD HH:mm」</td><td>全部角色</td></tr>
+</tbody>
+</table>
+
+<h2>八、优化清单（可直接排期）</h2>
+<div class="two">
+<div>
+<h3>立刻做（都是小改）</h3>
+<ul>
+<li><b>修假按钮</b>：<code>boss/warning.vue:108-110</code> 的「通知采购」→ 真发站内信给采购/仓管，或直接删掉按钮</li>
+<li><b>修死文案</b>：<code>check/submit.vue:213</code> 「老板/管理员审核」→「管理员/厂长审核」</li>
+<li><b>修无效筛选</b>：<code>boss/dashboard.vue:10</code> 日期切换 → 接真数据或先去掉</li>
+<li><b>补改密入口</b>：「我的」加「修改密码」页，或后端对小程序用户放开该门禁</li>
+<li><b>删/藏死页面</b>：<code>pages.json</code> 里 purchase/submit、purchase/detail、boss/trend 要么接入口要么删注册</li>
+</ul>
+<h3>本周做（体验明显提升）</h3>
+<ul>
+<li>给 6 个列表加<b>上拉加载</b>：仓管待办/库存/流水、盘点、预警、采购任务</li>
+<li>统一搜索<b>防抖</b>：抽一个 useDebounceSearch 换掉 4 处裸 @input</li>
+<li><b>消息进 tabBar</b>（或全局悬浮红点）</li>
+<li>出入库/盘点录入页顶部加<b>提醒条</b>：被驳回 / 待收货 / 待审核</li>
+<li>盘点退回加<b>原因输入</b>（后端已支持 remark）</li>
+<li>盘点详情<b>默认只显示差异项</b></li>
+<li>「其余按账面数填」加<b>二次确认 + 清空重录</b></li>
+</ul>
+</div>
+<div>
+<h3>值得做（效率提升）</h3>
+<ul>
+<li>领料/出库历史加「<b>再领一次</b>」</li>
+<li>采购任务支持「<b>批量套用购买方式</b>」+ 到货确认弹窗</li>
+<li>仓管入库供应商改成<b>可选择 + 历史记忆</b>；开放采购批量入库页</li>
+<li>「我的」页菜单<b>按角色裁剪</b>；「个人信息」去掉自我跳转</li>
+<li>金额/时间统一走 <code>utils/format.js</code></li>
+</ul>
+<div class="ask">
+<b>需要拍板的 4 个设计问题</b> <span style="color:#6fe6b8">—— 已拍板并落实，结果见第十节</span>
+<ol>
+<li>采购批量入库页（<code>purchase/submit</code>）<b>到底要不要？</b>要 → 我给它接入口；不要 → 删掉注册。</li>
+<li>看板日期维度：做成<b>真的</b>（后端加周期参数）还是<b>先撤掉</b>？</li>
+<li>消息提醒：<b>进 tabBar</b> 还是做成<b>全局悬浮</b>？这会影响所有页面的底部布局。</li>
+<li>管理员要不要<b>在小程序端能审批</b>？还是明确「小程序只给员工/老板，管理员回后台」。</li>
+</ol>
+</div>
+</div>
+</div>
+
+<h2>九、我没报的（这些做得对，别动）</h2>
+<ul>
+<li><code>out/detail.vue:207-227</code> 出库四步进度 + 收货前后果说明</li>
+<li><code>storekeeper/pending.vue:118-132, 202-211</code> 库存是否足够提示、报废单类型区分</li>
+<li><code>boss/stock.vue</code> 防抖 + 分页 + 只看预警 + 总额 —— <b>全站最完整的一个列表页，可以当模板</b></li>
+<li><code>purchase/history.vue</code> 支持导出 CSV</li>
+<li><code>in/history.vue</code> 列表直接带单价小计</li>
+<li><code>pages/index/index.vue</code> SCSS 卡片体系（8 个变体与 CSS 定义一一对应）</li>
+</ul>
+
+<h2>十、本轮修复进展（2026-10-09）</h2>
+
+<h3>10.1 你拍板的 4 个设计问题 → 已落实</h3>
+<table>
+<thead><tr><th>#</th><th>你的决定</th><th>落实结果</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>采购批量入库页 <code>purchase/submit</code> <b>不要</b></td>
+<td>已从 <code>pages.json</code> 下线注册，并删除 <code>purchase/submit.vue</code>、<code>purchase/history.vue</code>、<code>purchase/detail.vue</code>（连带孤儿）。顺带下线一直没入口的 <code>boss/trend.vue</code>。mp-weixin 产物同步清理残留文件</td></tr>
+<tr><td>2</td><td>看板日期维度 <b>做成真的</b></td>
+<td>后端 <code>stats.overview</code> 新增 <code>period=today/week/month</code>（本周按周一起算），返回 <code>period_label</code> 与 <code>period_outbound_orders / period_inbound_orders / …</code>；前端切 tab 真实重新取数、KPI 名称跟着变（今天/本周/本月出库单数）</td></tr>
+<tr><td>3</td><td>消息提醒 <b>后面接企业微信</b></td>
+<td>小程序端<b>未改</b>底部导航（不加 tabBar 消息位），保留现有站内消息作为底座，后续由站内消息桥接到企微</td></tr>
+<tr><td>4</td><td>管理员 <b>用后台审批</b></td>
+<td>小程序端不新增审批入口；同时把「我的」页菜单按角色裁剪，无权限角色（领料员/采购员）不再看到「盘点任务」</td></tr>
+</tbody>
+</table>
+
+<h3>10.2 已修复清单</h3>
+
+<p><b>立刻做（全部完成）</b></p>
+<ul>
+<li><b>假按钮变真</b>：<code>boss/warning</code> 的「通知采购」→ 新增后端 <code>stats.notifyWarning</code>，真实投递站内消息给<b>采购员 + 仓管</b>（单物料/整批两种），点之前二次确认，失败会说清原因（如「没有可通知的账号」）</li>
+<li><b>过时文案</b>：<code>check/submit</code> 的「需由老板/管理员审核」→「管理员/厂长审核」；<code>inbound.js</code> 两处「让老板或管理员处理」→「联系管理员」；连带修正 3 处把老板写成审批人的代码注释</li>
+<li><b>无效筛选</b>：看板日期切换已接真数据（见 10.1）</li>
+<li><b>补改密入口（原 P0）</b>：新增 <code>pages/my/password.vue</code>（校验长度/两次一致、可留空原密码给纯微信用户），「我的」页加「修改密码」入口 —— 命中「首次登录必须改密」的账号不再被锁死</li>
+<li><b>下线死页面</b>（见 10.1）</li>
+</ul>
+
+<p><b>本周做（全部完成）</b></p>
+<ul>
+<li><b>6 个列表补上拉加载</b>：仓管待办（4 类各自分页）/本仓库存/全部流水、盘点列表、预警列表、采购任务</li>
+<li><b>搜索防抖统一</b>：新增 <code>utils/debounce.js</code>，替换 <code>out/submit</code>、<code>in/submit</code>、<code>storekeeper/stock</code>、<code>purchase/tasks</code> 的裸 <code>@input</code></li>
+<li><b>盘点退回加原因</b>：<code>check/detail</code> 退回时用可输入弹窗收集原因，并<b>新增站内消息</b>（<code>check_rejected</code>）把原因发给盘点人 —— 原先只写操作日志，盘点人根本不知道哪里要重盘</li>
+<li><b>盘点详情默认只显示差异项</b>（顶部可切「仅有差异 / 全部」）</li>
+<li><b>「其余按账面数填」加二次确认 + 新增「清空重录」</b></li>
+<li>⏸️ <b>消息进 tabBar</b> → 按你的决定改为后续接企业微信，本轮不做</li>
+</ul>
+
+<p><b>值得做（已完成）</b></p>
+<ul>
+<li><b>再来一单</b>：出库历史每条记录加「再来一单」，把原单物料与数量预填进领料页（含自动切到原单仓库、沿用原单类型）</li>
+<li><b>采购批量套用购买方式</b> + <b>到货登记二次确认</b>（填错不用再走一轮）</li>
+<li><b>入库供应商可选择</b>：新增可搜索的供应商选择弹窗 + 记住最近 5 个用过的（手输仍保留）</li>
+<li><b>「我的」页菜单按角色裁剪</b>，去掉「个人信息」自我跳转</li>
+<li><b>金额格式统一</b>：<code>purchase/tasks</code>、<code>purchase/task-detail</code>、<code>in/history</code>、<code>in/detail</code>、<code>storekeeper/orders</code> 改走 <code>formatMoney</code>（千分位 + 两位小数）</li>
+<li><b>其他</b>：<code>boss/orders</code> 状态筛选补「待拣货 / 待收货」；<code>boss/dashboard</code>「库存总量」加口径说明；<code>storekeeper/purchase</code> 搜索防抖</li>
+<li>顺带修掉一个走查没发现、但一看就错的 bug：预警页严重度文案映射写的是 <code>out/low/idle</code>，而后端返回 <code>out_of_stock/critical/low</code> → <b>最严重的两档标签从来不显示</b></li>
+</ul>
+
+<h3>10.3 验证（都是实跑，不是「应该没问题」）</h3>
+<table>
+<thead><tr><th>验证项</th><th>结果</th></tr></thead>
+<tbody>
+<tr><td>修复项专项探针 <code>tests/_probe-fixes-1009.js</code></td><td><span class="badge ok">26 项全绿</span></td></tr>
+<tr><td>其中「看板周期真不真」的<b>对照实验</b></td><td>造 3 张分别落在今天 / 2 天前 / 5 天前的出库单 → <b>今天=1、本周=2、本月=3</b>（修复前前端不传周期，三个数必然相同）</td></tr>
+<tr><td>「通知采购」真实性</td><td>单物料通知返回「已通知 5 人」，库里落 5 条 <code>warning_notify</code>，收件人全是采购员/仓管（无领料员）；越权调用（领料员）403</td></tr>
+<tr><td>权限未被放宽</td><td>领料员调 <code>stats.overview</code> 仍 403；看板周期参数不改变任何权限判定</td></tr>
+<tr><td>mp-weixin 调试包</td><td><code>npm run build:mp-dev</code> 成功；<code>app.json</code> 页面清单已无 4 个下线页、新增 <code>pages/my/password</code>；产物里核对到 <code>bindscrolltolower</code>、<code>notifyWarning</code>、<code>period:</code>、<code>from_order</code>、<code>editable</code></td></tr>
+<tr><td>库基线</td><td>探针/回归跑完后：单据 0、盘点 0、消息 0、流水 1 条（初始化汇总）、库存全 10</td></tr>
+<tr><td>全量回归</td><td><span class="badge ok">7 套全绿</span> role-agent 3 轮 783/783（P0 0｜P1 0｜P2 0）、ui-check 33/33、director-check 42/42、warehouse-split 16/16、purchase-peritem 22/22、契约 66/66、专项探针 26/26</td></tr>
+</tbody>
+</table>
+
+<h3>10.4 全量回归明细（2026-10-09 实跑）</h3>
+<table>
+<thead><tr><th>套件</th><th>命令</th><th>结果</th></tr></thead>
+<tbody>
+<tr><td>岗位 Agent（3 轮 × 6 岗位）</td><td class="ev">node tests/role-agent/run.js --rounds 3</td><td>断言 <b>783/783</b>，失败 0，<b>P0 0 ｜ P1 0 ｜ P2 0</b>（跑完自动清理测试数据）</td></tr>
+<tr><td>UI 层（真实浏览器，后台 + 小程序 H5）</td><td class="ev">node tests/role-agent/ui-check.js</td><td>断言 <b>33/33</b>，结论「干净」（后台逐路由渲染 + 看板数字与接口比对；H5 开发身份登录后关键页渲染）</td></tr>
+<tr><td>厂长专项</td><td class="ev">node tests/role-agent/director-check.js</td><td><b>42/42</b>（含越权被拒 + 仓管对照）</td></tr>
+<tr><td>分仓隔离</td><td class="ev">node tests/role-agent/warehouse-split-check.js</td><td><b>16/16</b></td></tr>
+<tr><td>采购逐项</td><td class="ev">node tests/role-agent/purchase-peritem-check.js</td><td><b>22/22</b></td></tr>
+<tr><td>前端契约</td><td class="ev">node tests/verify-frontend-contracts.js</td><td><b>66/66</b>（含扫码精确命中、按 material_id 精确改价、改密接口）</td></tr>
+<tr><td>本轮专项探针</td><td class="ev">node tests/_probe-fixes-1009.js</td><td><b>26/26</b></td></tr>
+</tbody>
+</table>
+
+<div class="warnbox">
+⚠️ <b>ui-check 首跑报 <code>ERR_CONNECTION_REFUSED http://127.0.0.1:5174</code></b>：不是代码问题，是<b>缺 H5 静态服务</b>。
+且该服务必须与 ui-check <b>放在同一条命令里</b>起（<code>&amp;</code> 起完立刻跑），否则命令结束时后台进程会被回收，跑起来仍会拒绝连接。<br>
+正确姿势：<code>cd server; node tests/role-agent/static-serve.js &lt;h5产物目录&gt; 5174 &amp; sleep 2; node tests/role-agent/ui-check.js; kill %1</code>
+</div>
+
+<h3>10.5 收尾时发现并修掉的两个「测试残留」问题</h3>
+<p>收尾复查库基线时，数字和预期对不上（应为「单据 0、消息 0、流水 1、物料 1909」，实为「入库单 4、消息 19、物料 1918」）。查出两个根因：</p>
+
+<div class="item"><div class="head"><span class="badge p1">根因①</span><div class="txt"><b>单点测试套件不自清理</b>
+<div class="ev">只有 role-agent/run.js 跑完会调清理脚本；purchase-peritem-check.js、warehouse-split-check.js 完全没有收尾</div>
+<div class="ev">后果：全量回归末尾那两套留下的 4 张入库单、19 条站内消息、2 个 [V5-RECV] 测试物料一直躺在库里 —— 下次打开「搜物料 / 库存流水」就是一屏测试垃圾</div>
+<div class="want">新增共用收尾 server/tests/role-agent/_cleanup.js → autoCleanup()，接进这两个套件（正常与异常路径都触发，--no-cleanup 保留现场）。复验：仍 22/22、16/16 全绿，收尾真的触发了</div>
+</div></div></div>
+
+<div class="item"><div class="head"><span class="badge p1">根因②</span><div class="txt"><b>清理脚本的识别口径有盲区</b>
+<div class="ev">它按名字前缀（[V5% / [RA% / E2E% 等）+ dev_* 账号经手来认，抓不到：GAPTEST待删物料、KK、肠粉、XXXX、【复核】幽灵仓物料</div>
+<div class="want">已按你确认的「两类都清掉」执行：7 条历史测试垃圾 + 3 条成品仓「车间占位」行（节能炉/工程/西厨车间，库存 0、无流水）</div>
+<div class="ev">安全步骤：先查 5 张活表引用（入/出/采购/盘点明细 + 库存流水）→ 全为 0 才动手 → <code>CREATE TABLE _bak_junk_materials_&lt;时间戳&gt; AS SELECT …</code> 备份 → DELETE → 复查</div>
+<div class="want">结果：物料 1918 → <b>1906</b>，库存不是 10 的物料 7 → <b>0</b>，单据与消息保持 0</div>
+</div></div></div>
+
+<div class="foot">
+取证方式：逐页读小程序源码并标注行号 + 实际调用后端接口核对权限与数据。<br>
+口径说明：结论来自源码与接口的实测证据；点击手感、滚动流畅度这类真机体感需在微信开发者工具/真机补验，本报告不臆断。<br>
+胜龙进销存 ERP · G:/sl/shenglong-erp · 2026-10-09
+</div>
+
+</div>
+</body>
+</html>

@@ -127,24 +127,11 @@ function ensureAgreed() {
   return false
 }
 
-// 各角色登录后的默认落点
-const roleHome = {
-  out: '/pages/out/submit',
-  in: '/pages/in/submit',
-  purchase: '/pages/purchase/submit',
-  storekeeper: '/pages/storekeeper/dashboard',
-  boss: '/pages/boss/dashboard'
-}
-
-// 按角色跳转
+// 2026-10-09 改版：登录后**不再按角色自动跳页**，统一回首页工作台
+// （首页已按角色只显示自己的入口卡片；原 utils/role-home.js 已弃用删除，
+//   自动跳页会让人看不到首页上的待收货/驳回/未读消息提醒）。
 function goHome() {
-  const roles = userStore.roles || []
-  const hit = roles.find((r) => roleHome[r])
-  if (hit) {
-    uni.reLaunch({ url: roleHome[hit] })
-  } else {
-    uni.switchTab({ url: '/pages/index/index' })
-  }
+  uni.switchTab({ url: '/pages/index/index' })
 }
 
 /* 当前测试身份（用于按钮高亮） */

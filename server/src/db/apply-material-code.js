@@ -29,6 +29,7 @@ require('../config/env')
 const fs = require('fs')
 const path = require('path')
 const { pool, query, queryOne, execute } = require('./pool')
+const { assertDestructive } = require('./destructive-guard')
 
 /**
  * 编号前缀 → 中文类名
@@ -203,6 +204,9 @@ async function applyPeijian(codeRows) {
 }
 
 async function main() {
+  // ⛔ 安全闸门：一次性数据修复脚本，会批量改写 materials.material_no / sub_category —— 生产禁止误跑
+  assertDestructive('配件仓物料编号落地（一次性）', '将批量改写 materials.material_no 与 sub_category')
+
   console.log('==============================================')
   console.log('  胜龙进销存 · 配件仓物料编号落地')
   console.log('==============================================')
