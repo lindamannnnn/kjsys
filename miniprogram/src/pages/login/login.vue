@@ -32,12 +32,12 @@
         </view>
 
         <view class="form-item">
-          <text class="label">手机号（选填）</text>
+          <text class="label">手机号<text class="req">*</text></text>
           <input
             v-model="phone"
             class="input"
             type="number"
-            placeholder="请输入手机号"
+            placeholder="请输入手机号（必填）"
             placeholder-class="placeholder"
           />
         </view>
@@ -197,6 +197,16 @@ async function handleSubmitProfile() {
     uni.showToast({ title: '请输入真实姓名', icon: 'none' })
     return
   }
+  // 手机号必填（2026-10-14 用户要求）：方便管理员审核时知道是谁、联系上本人
+  const p = phone.value.trim()
+  if (!p) {
+    uni.showToast({ title: '请输入手机号', icon: 'none' })
+    return
+  }
+  if (!/^1\d{10}$/.test(p)) {
+    uni.showToast({ title: '手机号要是 11 位数字', icon: 'none' })
+    return
+  }
 
   try {
     uni.showLoading({ title: '提交中...', mask: true })
@@ -298,6 +308,10 @@ async function handleSubmitProfile() {
     }
   }
 
+  .req {
+    color: #ff5b45;
+    margin-left: 2px;
+  }
   .btn-submit {
     background: #07c160;
     color: #fff;
