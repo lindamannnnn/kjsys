@@ -173,6 +173,10 @@
         <el-form-item label="手机号">
           <el-input v-model="form.phone" placeholder="选填" />
         </el-form-item>
+        <el-form-item label="企微账号">
+          <el-input v-model="form.wecom_userid" placeholder="企业微信成员账号，用于企微推送（选填）" />
+          <div class="tip">填了才能把消息推到他的企业微信；不填则只发站内信</div>
+        </el-form-item>
         <el-form-item label="角色" required>
           <el-checkbox-group v-model="form.roles">
             <el-checkbox v-for="r in ROLES" :key="r.value" :value="r.value">
@@ -247,6 +251,7 @@ const form = ref({
   password: '',
   real_name: '',
   phone: '',
+  wecom_userid: '',
   roles: [],
   warehouse_ids: []
 })
@@ -339,6 +344,7 @@ function handleAdd() {
     password: '',
     real_name: '',
     phone: '',
+    wecom_userid: '',
     roles: [],
     warehouse_ids: []
   }
@@ -352,6 +358,7 @@ function handleEdit(row) {
     password: '',
     real_name: row.real_name || '',
     phone: row.phone || '',
+    wecom_userid: row.wecom_userid || '',
     roles: [...(row.roles || [])],
     warehouse_ids: normalizeIds(row.warehouse_ids)
   }
@@ -376,6 +383,7 @@ async function confirmForm() {
         id: form.value._id,
         real_name: form.value.real_name,
         phone: form.value.phone,
+        wecom_userid: form.value.wecom_userid,
         username: form.value.username || undefined
       })
       await userApi.updateRole({
@@ -400,6 +408,7 @@ async function confirmForm() {
         password: form.value.password,
         real_name: form.value.real_name,
         phone: form.value.phone,
+        wecom_userid: form.value.wecom_userid,
         roles: form.value.roles,
         warehouse_ids: form.value.warehouse_ids
       })

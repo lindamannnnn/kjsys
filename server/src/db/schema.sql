@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `avatar`        VARCHAR(512) NOT NULL DEFAULT '' COMMENT '微信头像',
   `real_name`     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '真实姓名',
   `phone`         VARCHAR(20)  NOT NULL DEFAULT '' COMMENT '手机号',
+  `wecom_userid`  VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '企业微信成员 UserID（企微推送用）',
   `roles`         JSON         DEFAULT NULL COMMENT '角色数组 ["out","in","purchase","storekeeper","boss","admin"]',
   `warehouse_ids` JSON         DEFAULT NULL COMMENT '可操作仓库 id 数组，NULL 表示全部',
   `status`        ENUM('pending','active','disabled') NOT NULL DEFAULT 'pending',

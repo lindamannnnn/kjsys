@@ -306,7 +306,7 @@ const enable = (ctx, data) => setStatus(ctx, data, 'active')
  * 入参：{ username, password, real_name, phone, roles:[], warehouse_ids:[] }
  */
 async function create(ctx, data = {}) {
-  const { username, password, real_name: realName, phone } = data
+  const { username, password, real_name: realName, phone, wecom_userid: wecomUserid } = data
   const roles = Array.isArray(data.roles) ? data.roles.filter((r) => VALID_ROLES.includes(r)) : []
   const warehouseIds = Array.isArray(data.warehouse_ids) ? data.warehouse_ids.map(Number).filter(Boolean) : []
 
@@ -326,10 +326,10 @@ async function create(ctx, data = {}) {
   const hash = await bcrypt.hash(String(password), 10)
 
   const res = await execute(
-    `INSERT INTO users (username, password_hash, real_name, phone, roles, warehouse_ids, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'active', NOW())`,
+    `INSERT INTO users (username, password_hash, real_name, phone, wecom_userid, roles, warehouse_ids, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NOW())`,
     [
-      cleanUsername, hash, String(realName).trim(), String(phone || ''),
+      cleanUsername, hash, String(realName).trim(), String(phone || ''), String(wecomUserid || '').trim(),
       JSON.stringify(roles), JSON.stringify(warehouseIds)
     ]
   )
@@ -386,6 +386,10 @@ async function update(ctx, data = {}) {
   if (phone !== undefined) {
     updates.push('phone = ?')
     params.push(String(phone))
+  }
+  if (data.wecom_userid !== undefined) {
+    updates.push('wecom_userid = ?')
+    params.push(String(data.wecom_userid || '').trim())
   }
   if (username !== undefined && String(username).trim()) {
     const cleanUsername = String(username).trim()

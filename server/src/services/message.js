@@ -13,6 +13,7 @@
  * ============================================================
  */
 const { query, execute } = require('../db/pool')
+const wecom = require('./wecom')
 
 /** 消息类型码（前端可据此决定点开后跳哪里） */
 const MSG_TYPE = {
@@ -133,7 +134,33 @@ async function pushMessage(opt = {}, conn = null) {
     conn
   )
 
+  // 企业微信同步推送（2026-10-14 投产新增）：
+  //   站内信工人不会主动去刷，关键动作要同步推到企微。
+  //   异步 fire-and-forget —— 不阻塞业务事务，推送失败也不影响站内信。
+  //   没配置企微（wecom.isEnabled()=false）时这里直接跳过，站内信照发。
+  if (wecom.isEnabled() && targets.length) {
+    const text = `【${title}】${content || ''}`.trim()
+    setImmediate(() => {
+      pushWecomToOpenids(targets, text).catch((e) => console.warn('[企微] 异步推送失败：', e.message))
+    })
+  }
+
   return targets.length
+}
+
+/**
+ * 把消息按 openid 推到对应员工的企业微信（只推给绑定了 wecom_userid 的）。
+ * 内部函数，不在模块导出 —— 业务侧只调 pushMessage。
+ */
+async function pushWecomToOpenids(openids, text) {
+  const ph = openids.map(() => '?').join(',')
+  const rows = await query(
+    `SELECT wecom_userid FROM users WHERE openid IN (${ph}) AND wecom_userid <> ''`,
+    openids
+  )
+  const ids = rows.map((r) => r.wecom_userid).filter(Boolean)
+  if (!ids.length) return { sent: 0 }
+  return wecom.sendText(ids, text)
 }
 
 module.exports = { MSG_TYPE, pushMessage, openidsByRoles, openidsByWarehouseRoles }
