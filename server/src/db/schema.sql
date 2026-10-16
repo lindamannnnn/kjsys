@@ -405,6 +405,7 @@ CREATE TABLE IF NOT EXISTS `purchase_task_items` (
   `quantity`      DECIMAL(14,3) NOT NULL DEFAULT 0,
   `unit_price`    DECIMAL(14,4) NOT NULL DEFAULT 0 COMMENT '实际单价（采购员填）',
   `purchase_channel` VARCHAR(32) NOT NULL DEFAULT '' COMMENT '该项购买方式（淘宝/京东/线下/其他）',
+  `channel_remark` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '「其他」购买方式的补充说明',
   `external_no`   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '该项外部单号',
   `receive_status` VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT '到货确认：pending/received/returned',
   `received_qty`  DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '实到数量',

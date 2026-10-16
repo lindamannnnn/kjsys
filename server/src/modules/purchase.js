@@ -144,8 +144,11 @@ async function create(ctx, data = {}) {
   // 指定人必须是启用中的采购员，否则任务会挂在一个没人能领的状态上
   let assigneeName = null
   if (assigneeOpenid) {
+    // ⚠️ 口径必须与前端下拉(assignees)一致：openid 优先、无 openid 的后台账号回落到 username。
+    //    原来只按 openid 查 → 生产上「后台手工建的采购员」会被判成「不存在」，永远指派不了。
     const u = await queryOne(
-      'SELECT real_name, nickname, status, roles FROM users WHERE openid = ? LIMIT 1',
+      `SELECT real_name, nickname, status, roles FROM users
+        WHERE COALESCE(NULLIF(openid, ''), NULLIF(username, '')) = ? LIMIT 1`,
       [assigneeOpenid]
     )
     if (!u) return fail(400, '指定的采购员不存在')
@@ -1217,19 +1220,23 @@ async function myTodoCount(ctx) {
 async function assignees(ctx) {
   if (!ctx.user) return fail(401, '请先登录')
 
+  // ⚠️ 不要再用「openid IS NOT NULL」过滤：后台手工建的账号（生产上的员工多数如此）没有 openid，
+  //    会被整批滤掉 → 下拉永远为空，仓管根本没法把任务指派到人（2026-10-16 生产盘查发现）。
+  //    收件人键口径与 services/message.js 的发消息端、middleware/auth.js 的 identityOf 保持一致。
+  const WHO = "COALESCE(NULLIF(openid, ''), NULLIF(username, ''))"
   const rows = await query(
-    `SELECT openid, real_name, nickname
+    `SELECT ${WHO} AS who, real_name, nickname
        FROM users
       WHERE status = 'active'
-        AND openid IS NOT NULL AND openid <> ''
+        AND ${WHO} IS NOT NULL AND ${WHO} <> ''
         AND JSON_CONTAINS(roles, JSON_QUOTE('purchase'))
       ORDER BY real_name, nickname`
   )
 
   return ok({
     list: toApi(rows.map((r) => ({
-      openid: r.openid,
-      name: r.real_name || r.nickname || r.openid
+      openid: r.who,
+      name: r.real_name || r.nickname || r.who
     })))
   })
 }

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文文进出库 · 生产环境全量功能盘查报告</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 20px 80px;
+    background: #0f1115;
+    color: #e6e8ee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.7; font-size: 15px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header { padding: 54px 0 32px; border-bottom: 1px solid #232733; }
+  .kicker { font-size: 13px; letter-spacing: .16em; color: #ff7a45; text-transform: uppercase; margin-bottom: 12px; }
+  h1 { font-size: 33px; margin: 0 0 8px; letter-spacing: -.02em;
+       background: linear-gradient(96deg,#ff4d2e,#ff9f1c 70%);
+       -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .sub { color: #8b93a7; font-size: 14px; }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .badge { padding: 7px 15px; border-radius: 999px; font-size: 13.5px; font-weight: 600; border: 1px solid; }
+  .badge.ok  { color: #4ade80; border-color: #1c6b3c; background: #0d2918; }
+  .badge.warn{ color: #fbbf24; border-color: #7a5a10; background: #2b2107; }
+  .badge.info{ color: #7dd3fc; border-color: #1c5a78; background: #082531; }
+
+  h2 { font-size: 22px; margin: 52px 0 6px; padding-left: 13px; border-left: 4px solid #ff5c33; letter-spacing: -.01em; }
+  h2 .en { font-size: 12px; color: #5d657a; font-weight: 400; letter-spacing: .1em; margin-left: 9px; }
+  h3 { font-size: 16.5px; margin: 30px 0 10px; color: #ffb27a; }
+  p { color: #c3c9d8; margin: 12px 0; }
+  .lead { font-size: 16.5px; color: #e6e8ee; background: #171a21;
+          border: 1px solid #232733; border-left: 4px solid #ff5c33;
+          border-radius: 10px; padding: 22px 24px; margin: 26px 0; }
+  .lead b { color: #ff9f6b; }
+
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid #232733; vertical-align: top; }
+  th { background: #191c24; color: #98a0b4; font-weight: 600; font-size: 13px; letter-spacing: .03em; }
+  tr:hover td { background: #14171e; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; color: #9aa3b8; white-space: nowrap; }
+  .pass { color: #4ade80; font-weight: 600; }
+
+  .card { background: #171a21; border: 1px solid #232733; border-radius: 11px;
+          padding: 20px 22px; margin: 18px 0; }
+  .card .tag { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+               padding: 3px 9px; border-radius: 5px; margin-bottom: 11px; }
+  .tag.p0 { background: #4a1410; color: #ff7a5c; border: 1px solid #822319; }
+  .tag.p1 { background: #3d2f0b; color: #fbbf24; border: 1px solid #7a5a10; }
+  .card h4 { margin: 0 0 12px; font-size: 16px; color: #f2f4f8; }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 7px 14px; font-size: 14px; }
+  .kv dt { color: #7d8598; }
+  .kv dd { margin: 0; color: #c3c9d8; }
+  code { background: #10131a; border: 1px solid #232733; border-radius: 4px;
+         padding: 1px 6px; font-size: 13px; color: #ffb27a;
+         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .arrow { color: #ff7a45; font-weight: 700; padding: 0 4px; }
+
+  .box-warn { background: #1d180b; border: 1px solid #6b5210; border-left: 4px solid #f59e0b;
+              border-radius: 9px; padding: 18px 22px; margin: 20px 0; }
+  .box-warn h4 { margin: 0 0 10px; color: #fcd34d; font-size: 15.5px; }
+  .box-info { background: #0b1b24; border: 1px solid #19485f; border-left: 4px solid #38bdf8;
+              border-radius: 9px; padding: 18px 22px; margin: 20px 0; }
+  .box-info h4 { margin: 0 0 10px; color: #7dd3fc; font-size: 15.5px; }
+
+  ul, ol { padding-left: 22px; color: #c3c9d8; }
+  li { margin: 7px 0; }
+  li::marker { color: #ff7a45; }
+  .muted { color: #7d8598; font-size: 13.5px; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid #232733; color: #5d657a; font-size: 13px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } h1 { font-size: 26px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Production Audit · 2026-10-16</div>
+  <h1>生产环境全量功能盘查报告</h1>
+  <div class="sub">
+    文文进出库（原胜龙进销存） · 生产 <code>https://sl.ekkosys.cn</code> · 119.91.206.235<br>
+    验证方式：<b style="color:#ff9f6b">在生产环境真实操作</b>，不看代码推断
+  </div>
+  <div class="badge-row">
+    <span class="badge ok">✔ 无未修复的致命缺陷</span>
+    <span class="badge ok">✔ 小程序 29 页零异常</span>
+    <span class="badge ok">✔ 权限隔离全部正确</span>
+    <span class="badge warn">△ 3 项轻微问题（不阻塞）</span>
+    <span class="badge info">已修复 3 个真 bug</span>
+  </div>
+</header>
+
+<div class="lead">
+  <b>结论先行：可以提审上线。</b><br>
+  这轮把你担心的「测了那么多次还有 bug」查清了根因 —— <b>以前的测试主要跑接口和本地环境，没在生产上把完整业务链真跑一遍</b>。
+  本轮改用在生产环境逐层真操作，<b>当场炸出 3 个真实缺陷</b>（其中一个让采购员录价 100% 失败），全部已修复并复验。
+  同时摸清了原来漏测的盲区：86 个接口里有 <b>8 个从未被任何测试碰过</b>，现已补齐。
+</div>
+
+<h2>一、覆盖总览 <span class="en">COVERAGE</span></h2>
+
+<table>
+  <thead>
+    <tr><th style="width:23%">层面</th><th style="width:38%">验证方式</th><th class="num" style="width:12%">断言项</th><th>结果</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>后端全部接口</td>
+      <td>在生产实例枚举全部接口，逐个真实调用</td>
+      <td class="num">86</td>
+      <td class="pass">全部可用；原先 8 个「从没被测试过」的接口已补齐验证</td>
+    </tr>
+    <tr>
+      <td>写接口入参守卫</td>
+      <td>36 个写接口逐个传非法 / 空参数</td>
+      <td class="num">36</td>
+      <td class="pass">0 个崩溃、0 个泄露堆栈</td>
+    </tr>
+    <tr>
+      <td>完整业务链</td>
+      <td>真建单、真提交、真审核、真扣库存，逐步核对数据库数值</td>
+      <td class="num">40+ 步</td>
+      <td class="pass">出库四态 / 采购全链 / 盘点全链 全通；<b style="color:#ff7a5c">过程中炸出 1 个 P0</b></td>
+    </tr>
+    <tr>
+      <td>管理后台</td>
+      <td>7 个岗位 × 24 个页面，浏览器真实点击、抓失败请求</td>
+      <td class="num">168</td>
+      <td class="pass">84 页正常渲染 + 83 项被权限/规则正确拦截 + 1 项偶发 404（复现不出）</td>
+    </tr>
+    <tr>
+      <td>小程序页面</td>
+      <td>29 个页面逐页真实打开（连生产接口的那份包）</td>
+      <td class="num">29</td>
+      <td class="pass">29 通过，0 JS 异常、0 白屏、0 报错字样</td>
+    </tr>
+    <tr>
+      <td>小程序岗位视图</td>
+      <td>7 个岗位的真实登录态，看首页入口 + 打开核心页</td>
+      <td class="num">27</td>
+      <td class="pass">入口按岗位精确隔离，全部正确</td>
+    </tr>
+    <tr>
+      <td>越权与脱敏</td>
+      <td>用各岗位令牌直接打不该打的接口</td>
+      <td class="num">12</td>
+      <td class="pass">越权一律 403；金额/库存脱敏全部生效</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>二、本轮修复的 3 个真实缺陷 <span class="en">FIXED</span></h2>
+
+<p class="muted">这三个都不是「看代码猜的」，是在生产上真操作时当场报错、并有堆栈/接口回包为证。修复后都用同一个请求复验过。</p>
+
+<div class="card">
+  <span class="tag p0">P0 · 功能完全不可用</span>
+  <h4>1. 采购员录采购单价 —— 100% 报错，采购线后半段全废</h4>
+  <dl class="kv">
+    <dt>现象</dt><dd>采购员在「采购任务」里录入单价、购买方式 → 页面转圈后报错，任务卡在「采购中」走不下去</dd>
+    <dt>铁证</dt><dd><code>Unknown column 'channel_remark' in 'field list'</code>（生产后端日志带堆栈）</dd>
+    <dt>根因</dt><dd>生产库 <code>purchase_task_items</code> 缺这一列；<b>而"库结构对照文件"里也缺</b> —— 两边都缺，所以自动校验反而报「无异常」。这是漂移检测本身的盲区</dd>
+    <dt>修法</dt><dd>生产库补列 + 同步对照文件；另外新增一套<b>「代码 ↔ 库」</b>的列引用比对，堵住这个盲区</dd>
+    <dt>复验</dt><dd><span class="pass">✅ 同一请求修复前 500 → 修复后成功</span>，采购链路一路跑到入库</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <span class="tag p1">P1 · 功能静默失效</span>
+  <h4>2. 消息「已读」必然失败 —— 后台建的账号看不到自己的消息</h4>
+  <dl class="kv">
+    <dt>现象</dt><dd>后台建的账号（仓管、采购、老板…）消息列表空白、未读数永远 0、点「全部标为已读」报「请先登录」</dd>
+    <dt>铁证</dt><dd>同库同代码，只换身份对照：赵六（后台建）<b>列表空 / 未读数 0 / 标记已读 401</b>；文彬（微信登录）<b>列表 3 条 / 未读 3 / 标记成功</b></dd>
+    <dt>根因</dt><dd><b>发消息和读消息用了两套身份口径</b>：发的时候用「微信号，没有就用账号名」兜底；读的时候只认微信号 —— 后台账号没有微信号，所以消息发得出去、收不到</dd>
+    <dt>修法</dt><dd>读的一侧统一成同一套兜底口径（这是全局唯一一处漏用，其余模块早已统一）</dd>
+    <dt>复验</dt><dd><span class="pass">✅ 赵六消息列表从空 → 3 条，未读数 3，标记已读成功</span></dd>
+  </dl>
+</div>
+
+<div class="card">
+  <span class="tag p1">P1 · 功能静默失效</span>
+  <h4>3. 采购员指派下拉框 —— 永远是空的</h4>
+  <dl class="kv">
+    <dt>现象</dt><dd>仓管发采购任务时想指定采购员，下拉框一个选项都没有</dd>
+    <dt>根因</dt><dd>取人员的 SQL <b>主动排除</b>了没有微信号的账号，而真实的采购员正是后台建的账号 → 被自己排除掉了</dd>
+    <dt>修法</dt><dd>去掉这个排除条件，改用统一的身份口径</dd>
+    <dt>复验</dt><dd><span class="pass">✅ 下拉框从空 → 正常出现「李娜」</span></dd>
+  </dl>
+</div>
+
+<div class="box-info">
+  <h4>顺带发现：原来的自动校验有个盲区，已补上</h4>
+  <p style="margin:0">
+    原先的库结构校验是「生产库 ↔ 本地对照文件」比对。但如果<b>本地对照文件本身也忘了写这一列</b>，两边都缺就会报「一切正常」——
+    采购录价那个 P0 就是这么溜过去的。现已新增「<b>真代码里用到的列 ↔ 数据库实际有的列</b>」比对，
+    跑完只报出 1 处真缺失（已修），没有误报。以后这类问题部署后会自动现形。
+  </p>
+</div>
+
+<h2>三、真实业务链验证明细 <span class="en">END-TO-END</span></h2>
+
+<table>
+  <thead><tr><th style="width:19%">链路</th><th>真实操作步骤</th><th style="width:26%">数据库核对结果</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>出库（领料）四态</td>
+      <td>待确认 → 仓管确认 → 拣货完成 → 领料员确认收货</td>
+      <td class="pass">状态四态全通；库存 10 → 5 扣减正确</td>
+    </tr>
+    <tr>
+      <td>采购全链</td>
+      <td>仓管发任务 → 采购员领取 → 录价 → 登记到货 → 完成收货</td>
+      <td class="pass">库存 100 → 102；加权均价算对（12）；<br>重复入库有保护</td>
+    </tr>
+    <tr>
+      <td>盘点全链</td>
+      <td>建盘点任务 → 录实盘数（故意盘亏 2）→ 管理员审核</td>
+      <td class="pass">账面 102 / 实盘 100，差异 -2 正确回写库存</td>
+    </tr>
+    <tr>
+      <td>基础数据</td>
+      <td>物料建档、供应商增删改查、用户审核/改岗/停用/启用/重置密码/日志</td>
+      <td class="pass">全部通过；<b>物料接口拒绝直接改库存</b>（守卫到位）</td>
+    </tr>
+    <tr>
+      <td>消息与文件</td>
+      <td>消息列表/未读数/单条已读/全部已读；图片上传</td>
+      <td class="pass">全通；上传含<b>路径穿越防御</b>（<code>../../etc/passwd</code> 被净化）</td>
+    </tr>
+    <tr>
+      <td>报表</td>
+      <td>月结报表、月结导出</td>
+      <td class="pass">通过</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>四、权限与数据安全 <span class="en">AUTHZ</span></h2>
+
+<table>
+  <thead><tr><th style="width:30%">验证项</th><th>做法</th><th style="width:22%">结果</th></tr></thead>
+  <tbody>
+    <tr><td>越权操作接口</td><td>用老板 / 采购 / 领料 / 仓管令牌分别去打别人岗位的写接口</td><td class="pass">一律 403「无操作权限」</td></tr>
+    <tr><td>纯领料员看库存</td><td>领料员调物料列表</td><td class="pass">库存数量 + 成本价<b>双脱敏</b></td></tr>
+    <tr><td>仓管看金额</td><td>仓管调物料列表</td><td class="pass">看得到数量、<b>看不到成本价</b></td></tr>
+    <tr><td>未登录访问</td><td>不带令牌打任意业务接口</td><td class="pass">401</td></tr>
+    <tr><td>开发后门</td><td>用测试身份尝试登录生产</td><td class="pass">已关闭</td></tr>
+    <tr><td>微信登录链路</td><td>用假 code 打登录接口</td><td class="pass">请求真实到达微信服务器（配置正确）</td></tr>
+    <tr><td>畸形请求</td><td>发非法 JSON</td><td class="pass">不泄露堆栈（文案中性）</td></tr>
+  </tbody>
+</table>
+
+<h3>小程序「按岗位显示什么」实测对照</h3>
+<p class="muted">用 7 个岗位的真实登录态，逐个看首页实际渲染出的功能入口 —— 权限隔离是否真的生效。</p>
+<table>
+  <thead><tr><th style="width:30%">岗位</th><th>首页实际显示的入口</th></tr></thead>
+  <tbody>
+    <tr><td>文彬（老板+领料+仓管）</td><td>领料出库 · 报废申请 · 入库登记 · 仓管工作台 · 发起采购 · 老板看板 · 库存盘点 · 库存流水 · 消息</td></tr>
+    <tr><td>赵六（配件仓管）</td><td>入库登记 · 仓管工作台 · 发起采购 · 库存盘点 · 库存流水 ……<span class="muted">（无领料出库 / 无老板看板）</span></td></tr>
+    <tr><td>李娜（采购员）</td><td>采购任务 · 库存流水 · 消息 <span class="muted">（仅采购相关）</span></td></tr>
+    <tr><td>张三（领料员）</td><td>领料出库 · 报废申请 · 消息 <span class="muted">（仅领料相关）</span></td></tr>
+    <tr><td>厂长</td><td>发起采购 · 经营看板 · <b>成品仓出库</b> · 库存盘点 ……<span class="muted">（成品仓出库是厂长专属）</span></td></tr>
+    <tr><td>王总（老板）</td><td>老板看板 · 库存流水 · 消息</td></tr>
+  </tbody>
+</table>
+
+<h2>五、需要你决定的 3 项轻微问题 <span class="en">NON-BLOCKING</span></h2>
+<p class="muted">都不影响上线，也不影响正常使用，但既然查出来了就如实列给你。</p>
+
+<div class="box-warn">
+  <h4>△ 1. 首页「消息」入口在首屏之外，未读红点要点进来往下滑才看得到</h4>
+  <p style="margin:0">
+    实测位置：消息入口在页面纵向 789px 处，而首屏可视高度只有 752px —— 正好差一点。
+    功能没坏，能滑到，但「有未读消息」这个提示用户第一眼看不到。
+    可选处理：把消息移到顶部、或缩短卡片高度、或不改（员工知道往下滑）。
+  </p>
+</div>
+
+<div class="box-warn">
+  <h4>△ 2. 小程序没有页面级的「按岗位拦住页面」</h4>
+  <p style="margin:0">
+    首页入口是按岗位精确隔离的（该岗位完全看不到不该有的入口），这点没问题。
+    但如果绕开首页直接打开某个页面（例如采购员打开仓管工作台），页面壳会打开、操作按钮也渲染出来，
+    只是<b>数据被后端挡住（显示 0）、点按钮才报无权限</b>。
+    不是数据泄露（后端拦得很死），是观感问题。要不要加一层页面守卫，你定。
+  </p>
+</div>
+
+<div class="box-warn">
+  <h4>△ 3. 个别接口对无权限角色返回「空列表」而不是「无权限」</h4>
+  <p style="margin:0">
+    例如领料员调采购任务列表 / 盘点列表，返回的是 200 + 空列表（因为按身份过滤后本来就没有他的数据），
+    而不是 403。结果上没有任何数据泄露，只是口径偏松。可改可不改。
+  </p>
+</div>
+
+<h2>六、盘查期间产生的数据 —— 请你决定怎么处理 <span class="en">CLEANUP</span></h2>
+
+<div class="box-info">
+  <h4>临时改动已全部回滚</h4>
+  <p style="margin:0">
+    · 为验证多岗位登录，临时给 6 个账号补过测试用微信标识 → <b>已全部还原成原状（NULL），逐行核对过</b><br>
+    · 为验证厂长视图临时改的岗位 → <b>已还原</b><br>
+    · 盘查用的临时账号 <code>audit_probe</code> → <b>已停用</b>（没有硬删）<br>
+    · 服务器上的临时令牌文件 → <b>已删除</b><br>
+    · 生产库在做任何改动前都做了全量备份
+  </p>
+</div>
+
+<p>下面这些是盘查时为了「真跑一遍」造出来的业务单据（都带了标记，方便你一眼认出）。它们<b>占用了真实库存和数量</b>，所以需要你决定是作废还是留着当演示数据：</p>
+
+<table>
+  <thead><tr><th style="width:22%">类型</th><th style="width:16%">编号</th><th>说明</th><th style="width:19%">建议</th></tr></thead>
+  <tbody>
+    <tr><td>采购任务</td><td><code>CG-20261016-001</code></td><td>已完成并入库（KA炉盘 +2，动了库存和均价）</td><td>可作废</td></tr>
+    <tr><td>采购任务</td><td><code>CG-20261016-002</code></td><td>采购中（李娜录过测试单价 9）</td><td>可作废</td></tr>
+    <tr><td>盘点单</td><td><code>CHK-20261016-001</code></td><td>已完成，把 KA炉盘 从 102 调成 100</td><td>保留或作废</td></tr>
+    <tr><td>入库单</td><td><code>IN-20261016-003</code></td><td>演示库存（夹板 / 钢板膜 / 炉盘 各 100）</td><td>留作演示</td></tr>
+    <tr><td>入库单</td><td><code>IN-20261016-004</code></td><td>上面采购任务到货入库产生的</td><td>随 001 一起处理</td></tr>
+    <tr><td>供应商</td><td>【盘查】测试供应商</td><td>测试用，无关联单据</td><td>建议删</td></tr>
+    <tr><td>物料</td><td>【盘查】测试物料</td><td>测试用</td><td>建议删</td></tr>
+    <tr><td>账号</td><td><code>audit_probe</code></td><td>盘查临时账号，已停用</td><td>建议删</td></tr>
+    <tr><td>账号</td><td>文彬以外的一个空白待审核账号</td><td>是<b>更早之前</b>留下的空壳（不是这轮造的），上线前该清</td><td>建议删</td></tr>
+  </tbody>
+</table>
+<p class="muted">注：你自己 17:45 提交的那张出库单（水鞋 ×5）<b>没动过</b>，是完整跑完四态流程的。</p>
+
+<h2>七、这次没覆盖到的部分（如实说明） <span class="en">NOT COVERED</span></h2>
+<ul>
+  <li><b>没有在真手机上点</b> —— 这轮是在微信开发者工具的模拟器里跑真实包、连真实生产接口。相机拍照、扫码、真机字体差异这类只有真机能验，需要你在手机上过一遍（我可以给逐项检查清单）。</li>
+  <li><b>没有做高并发 / 压测</b> —— 多人同时抢同一张单的并发情况，本轮只验证了代码里的抢单与锁的逻辑存在，没有真实压测。</li>
+  <li><b>没有验证定时任务长期表现</b> —— 备份任务手动触发确认过成功，但它按天自动跑是否稳定需要时间观察。</li>
+  <li><b>企微推送没验</b> —— 企微应用还没配到生产。</li>
+</ul>
+
+<footer>
+  报告生成时间：2026-10-16 19:20 · 执行方式：生产环境真实操作（真实接口 + 真实数据库核对）<br>
+  全部结论均有对应的接口回包、数据库查询结果或页面截图作为依据；本轮发现的问题不存在"看代码推测"的结论。
+</footer>
+
+</div>
+</body>
+</html>
