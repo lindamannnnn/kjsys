@@ -26,7 +26,9 @@
     "audit:data": "node tests/data-audit.js",
     "db:apply-messages": "node src/db/apply-messages-table.js",
     "db:migrate-outbound": "node src/db/migrate-outbound-4stage.js",
-    "db:apply-purchase": "node src/db/apply-purchase-tables.js"
+    "db:apply-purchase": "node src/db/apply-purchase-tables.js",
+    "wecom:test": "node scripts/test-wecom.js",
+    "wecom:users": "node scripts/wecom-list-users.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
