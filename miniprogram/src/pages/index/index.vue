@@ -86,7 +86,11 @@
     <!-- 待审核 -->
     <view v-else-if="isPending" class="pending-prompt">
       <text class="prompt-text">账号审核中</text>
-      <text class="prompt-sub">请等待管理员审核</text>
+      <text class="prompt-sub">本系统按岗位授权使用，管理员分配岗位后即可开始使用</text>
+      <text v-if="!userStore.realName" class="prompt-hint">
+        首次使用请先前往「我的」填写真实姓名，管理员才能审核通过
+      </text>
+      <button class="btn-refresh" @click="onRefreshStatus">刷新状态</button>
     </view>
 
     <!-- 已登录，显示角色入口 -->
@@ -393,6 +397,21 @@ function goLogin() {
   uni.navigateTo({ url: '/pages/login/login' })
 }
 
+/**
+ * 待审核页「刷新状态」按钮
+ * 首页 onShow 本来也会重新拉用户信息，但人卡在这个页面上时没有"我该干什么"的反馈，
+ * 给一个明确的手动入口（管理员刚审核通过时点一下就进来了，不必退出重登）。
+ */
+async function onRefreshStatus() {
+  await userStore.refreshUser()
+  if (userStore.isPending) {
+    uni.showToast({ title: '仍在审核中，请稍后再试', icon: 'none' })
+  } else {
+    uni.showToast({ title: '已通过审核', icon: 'success' })
+    loadAfterLogin()
+  }
+}
+
 // 打开协议页（用户服务协议 / 隐私政策）
 function openDoc(type) {
   uni.navigateTo({ url: `/pages/agreement/${type}` })
@@ -548,6 +567,27 @@ onMounted(() => {
     color: #999;
     display: block;
     margin-bottom: 40rpx;
+  }
+
+  .prompt-hint {
+    font-size: 24rpx;
+    color: #999;
+    line-height: 1.7;
+    display: block;
+    margin-bottom: 40rpx;
+  }
+
+  .btn-refresh {
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 50rpx;
+    padding: 24rpx;
+    font-size: 28rpx;
+    margin: 0 60rpx;
+
+    &::after {
+      border: none;
+    }
   }
 }
 
