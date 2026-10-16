@@ -88,7 +88,7 @@
 
 ### [P1] Web 后台登录后**白屏**，内页一刷新就 404——我这个老板根本进不去后台
 
-- **现象**：我用浏览器打开 `http://119.91.206.235:3000/admin/`，页面先跳成 `/login`（能显示登录框），我用 `admin/ssCW9GF0DJu1` 登录成功后，地址栏回到 `/admin/`，**屏幕一片空白**（截图 `docs/screenshots/audit-boss-admin-blank.png`）。而且我只要在内页按一下刷新（比如 `/login`、`/dashboard`），服务器直接回 `{"code":404,"message":"接口不存在：GET /login"}`。
+- **现象**：我用浏览器打开 `http://119.91.206.235:3000/admin/`，页面先跳成 `/login`（能显示登录框），我用管理员账号（`admin`）登录成功后，地址栏回到 `/admin/`，**屏幕一片空白**（截图 `docs/screenshots/audit-boss-admin-blank.png`）。而且我只要在内页按一下刷新（比如 `/login`、`/dashboard`），服务器直接回 `{"code":404,"message":"接口不存在：GET /login"}`。
 - **原始请求**：`GET http://119.91.206.235:3000/admin/` → `HTTP 200`（返回 SPA 首页）；`GET http://119.91.206.235:3000/login` → `HTTP 404 {"code":404,"message":"接口不存在：GET /login"}`
 - **原始响应（浏览器内实测）**：登录后 `location.href=http://119.91.206.235:3000/admin/`，`document.body.innerText=""`（空白），无任何菜单/DOM。
 - **预期**：老板打开后台能进看板、能点"配件仓物料/成品仓物料"两个菜单看数、能导出。

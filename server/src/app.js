@@ -261,6 +261,10 @@ app.use((err, req, res, next) => {
 
 // ---------- 启动 ----------
 const PORT = Number(process.env.PORT || 3000)
+// 监听地址：默认 0.0.0.0（本地开发真机联调要局域网可达）。
+// ⚠️ 生产建议显式设 HOST=127.0.0.1 —— 对外只走 Nginx 反代（HTTPS），
+//    否则公网可用明文 HTTP 直连 3000，绕过 TLS。
+const HOST = process.env.HOST || '0.0.0.0'
 
 async function bootstrap() {
   try {
@@ -271,10 +275,10 @@ async function bootstrap() {
     console.error('请确认 MySQL 已启动，且 .env 中的 DB_* 配置正确')
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, HOST, () => {
     console.log('==============================================')
     console.log('  胜龙进销存系统 · 后端接口服务已启动')
-    console.log(`  地址: http://0.0.0.0:${PORT}`)
+    console.log(`  监听: ${HOST}:${PORT}${HOST === '127.0.0.1' ? '（仅本机，外网走 Nginx 反代）' : ''}`)
     console.log(`  健康检查: http://127.0.0.1:${PORT}/api/health`)
     console.log(`  模块: ${modules.map((m) => m.name).join(', ')}`)
     console.log('==============================================')
