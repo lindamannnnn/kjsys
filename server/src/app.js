@@ -24,6 +24,12 @@ const {
 } = require('./services/warehouse')
 const { auditDenied } = require('./services/audit')
 const { ping } = require('./db/pool')
+const {
+  securityHeaders,
+  checkLogin,
+  noteLoginFailure,
+  noteLoginSuccess
+} = require('./middleware/security')
 
 // ---------- 业务模块 ----------
 const modules = [
@@ -42,6 +48,10 @@ const modules = [
 ]
 
 const app = express()
+
+// ---------- 安全响应头（必须在所有路由之前） ----------
+// 生产实测原先无任何安全头 → 后台公网可访问且可被 iframe 嵌套（点击劫持）
+app.use(securityHeaders)
 
 app.set('trust proxy', true)
 app.use(cors({ origin: true, credentials: true }))
@@ -114,6 +124,49 @@ if (require('fs').existsSync(ADMIN_DIR)) {
   })
 }
 
+/**
+ * 待审核账号（pending）允许调用的动作 —— 「模块名.动作名」白名单。
+ *
+ * 为什么需要（AUTHZ-01，2026-10-16 生产实测复现）：
+ *   小程序登录是「扫码即自动建档、状态 pending、无任何角色」（见 modules/auth.js login）。
+ *   而原先这里只拦 disabled，漏了 pending；那 8 个列表接口又没配 roleRules
+ *   → **零角色账号可以读到**：物料档案（含 current_stock 库存、avg_cost 成本，实测 1907 条）、
+ *     供应商（含 phone 联系电话）、仓库、各类单据列表。
+ *   任何扫到小程序码的人都能拿到这个身份，属于实打实的数据泄露。
+ *
+ * 白名单只放行三类：
+ *   · 登录 / 完善资料 / 看自己的信息（pending 用户要走完注册流程）
+ *   · 自己的消息与待办（都按 identityOf 收敛，零角色时天然返回 0，无泄露）
+ * 注意：首页的 pendingCount / pickingCount **不放行** —— 它们按仓库收敛，
+ *   零角色时不过滤（实测 inbound.pendingCount 返回 2，会泄露「待确认单有几张」）；
+ *   而前端那两处调用已用 safe() 包住，403 不会打断页面。
+ */
+const PENDING_ALLOW = new Set([
+  'auth.login',
+  'auth.adminLogin',
+  'auth.register',
+  'auth.getUserInfo',
+  'auth.updateProfile',
+  'auth.myLogs',
+  'auth.changePassword',
+  'message.list',
+  'message.unreadCount',
+  'message.markRead',
+  'message.markAllRead',
+  'outbound.myNotice',
+  'purchase.myTodoCount'
+])
+
+/**
+ * 需要做「暴力破解防护」的动作。
+ *
+ * 为什么只覆盖 adminLogin（2026-10-16 生产隐患排查）：
+ *   后台是公网可访问的，adminLogin 原先**没有任何失败计数** —— 密码可以被无限次猜。
+ *   小程序 login 走微信 code（一次性、不可枚举），changePassword 需要已登录的令牌，
+ *   都不构成匿名猜解面，因此不纳入（纳入了反而可能把正常用户锁在外面）。
+ */
+const LOGIN_GUARDED = new Set(['auth.adminLogin'])
+
 // ---------- 业务模块统一分发 ----------
 for (const mod of modules) {
   app.post(`/api/${mod.name}`, async (req, res) => {
@@ -178,6 +231,13 @@ for (const mod of modules) {
           auditDenied({ ctx, moduleName: mod.name, action, code: 403, reason: '账号已被禁用' })
           return res.json(fail(403, '账号已被禁用，请联系管理员'))
         }
+        // ---- 待审核账号拦截（AUTHZ-01）----
+        // 原先只拦 disabled、漏了 pending → 零角色账号能读物料/供应商/仓库/单据列表（生产实测）。
+        // 审核通过前只放行「登录 / 完善资料 / 看自己」，其余一律 403。
+        if (ctx.user.status === 'pending' && !PENDING_ALLOW.has(`${mod.name}.${action}`)) {
+          auditDenied({ ctx, moduleName: mod.name, action, code: 403, reason: '账号待审核' })
+          return res.json(fail(403, '账号正在审核中，请等待管理员审核通过'))
+        }
       }
 
       // ---- 角色权限校验 ----
@@ -203,8 +263,32 @@ for (const mod of modules) {
         return res.json(fail(403, '首次登录必须先修改初始密码，请前往「修改密码」'))
       }
 
+      // ---- 登录暴力破解防护（只拦，不阻断正常用户）----
+      const guarded = LOGIN_GUARDED.has(`${mod.name}.${action}`)
+      if (guarded) {
+        const g = checkLogin(action, req, data)
+        if (g.blocked) {
+          auditDenied({
+            ctx, moduleName: mod.name, action, code: 429,
+            reason: `登录尝试过多：${g.message}`
+          })
+          res.setHeader('Retry-After', String(g.retryAfter))
+          return res.json(fail(429, g.message))
+        }
+      }
+
       // ---- 执行 ----
       const result = await handler(ctx, data)
+
+      // 只把「失败」计入限流：正常用户输错一两次不受影响，
+      // 成功登录还会把该账号的失败记录清掉，避免误伤。
+      if (guarded) {
+        if (result && typeof result === 'object' && result.code === 0) {
+          noteLoginSuccess(action, req, data)
+        } else {
+          noteLoginFailure(action, req, data)
+        }
+      }
 
       // handler 统一返回 { code, data, message }
       if (result && typeof result === 'object' && 'code' in result) {
