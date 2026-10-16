@@ -19,7 +19,7 @@ export const APP_NAME = '胜龙进销存'
  */
 export const OPERATOR_NAME = '文彬'
 
-/** 联系邮箱（审核员和使用单位内部人员都会看，填一个真实可达的邮箱） */
+/** 联系邮箱（审核员和经授权使用者都会看，填一个真实可达的邮箱） */
 export const CONTACT_EMAIL = '360752942@qq.com'
 
 /** 联系电话 */

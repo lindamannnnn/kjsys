@@ -259,7 +259,14 @@ if (fs.existsSync(legalPath)) {
   }
 }
 
-// 2.6) 审核可见页面不得用「本企业 / 企业内部」等企业主体口吻
+// 2.6) 审核可见页面不得出现「组织主体 / 雇佣关系」口吻
+//      本小程序注册主体是**个人**，两类措辞都要拦：
+//      · 「本企业 / 企业内部」 —— 个人不能自称企业
+//      · 「使用单位 / 单位内部 / 该单位 / 本单位 / 员工」 —— 个人不能声称"在为单位(企业)提供服务"
+//        ⚠️ 2026-10-16 实测：小程序备案的「备注」栏就因为这类字眼被拦下，
+//           审核员看页面同样会挑（口径统一改「经授权人员 / 使用者」）
+//      ⚠️ 只匹配这些成词组合，**不匹配裸的「单位」** —— 物料/库存的「计量单位」是正常用法
+const ENT_PATTERN = /本企业|企业内部|使用单位|单位内部|单位自有|该单位|本单位|员工/g
 const ENT_SCOPE_FILES = [
   'src/pages/index/index.vue',
   'src/pages/login/login.vue',
@@ -270,14 +277,16 @@ const entHits = []
 for (const rel of ENT_SCOPE_FILES) {
   const p = path.join(ROOT, rel)
   if (!fs.existsSync(p)) continue
-  const n = (fs.readFileSync(p, 'utf8').match(/本企业|企业内部/g) || []).length
+  const n = (fs.readFileSync(p, 'utf8').match(ENT_PATTERN) || []).length
   if (n) entHits.push(`${rel}（${n} 处）`)
 }
 if (entHits.length) {
-  rec('must', '企业主体口吻（个人主体不适用）',
-    `${entHits.join('、')} 出现「本企业/企业内部」→ 个人主体这样写对不上，统一改「使用单位」口径`)
+  rec('must', '组织主体/雇佣口吻（个人主体不适用）',
+    `${entHits.join('、')} 出现「本企业/使用单位/单位内部/员工」等字眼 → ` +
+    `个人主体下对不上（**小程序备案的备注栏也会因此被拦**），` +
+    `统一改「经授权人员 / 使用者 / 开发者」口径`)
 } else {
-  rec('info', '企业主体口吻（个人主体不适用）', '审核可见页面均无「本企业」口吻 ✓')
+  rec('info', '组织主体/雇佣口吻（个人主体不适用）', '审核可见页面均无「本企业/使用单位/员工」口吻 ✓')
 }
 
 // 3) 登录页必须有「主动同意协议」步骤，且不得默认勾选
