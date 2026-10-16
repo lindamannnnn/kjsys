@@ -2,7 +2,7 @@
   <view class="container">
     <!-- 顶部标题 -->
     <view class="header">
-      <text class="title">胜龙进销存</text>
+      <text class="title">文文进出库</text>
     </view>
 
     <!-- 加载中 -->

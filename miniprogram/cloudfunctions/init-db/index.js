@@ -180,7 +180,7 @@ async function initData() {
     await db.collection('settings').add({
       data: {
         _id: 'system',
-        company_name: '胜龙汽配',
+        company_name: '文文进出库',
         warning_enabled: true,
         backup_enabled: true,
         order_no_prefix_out: 'OUT',

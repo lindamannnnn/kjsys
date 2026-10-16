@@ -10,7 +10,7 @@
  */
 
 /** 小程序名称（与微信公众平台上的名称保持一致） */
-export const APP_NAME = '胜龙进销存'
+export const APP_NAME = '文文进出库'
 
 /**
  * 运营/开发者主体名称

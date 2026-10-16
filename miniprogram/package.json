@@ -1,7 +1,7 @@
 {
   "name": "shenglong-erp-miniprogram",
   "version": "2.1.0",
-  "description": "胜龙进销存系统 - 微信小程序端",
+  "description": "文文进出库系统 - 微信小程序端",
   "private": true,
   "scripts": {
     "dev:mp-weixin": "uni -p mp-weixin",

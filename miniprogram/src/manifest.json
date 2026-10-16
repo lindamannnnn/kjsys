@@ -1,7 +1,7 @@
 {
-  "name": "胜龙进销存",
+  "name": "文文进出库",
   "appid": "__UNI__XXXXXX",
-  "description": "胜龙汽配进销存管理系统",
+  "description": "物资出入库与库存账目管理系统",
   "versionName": "2.1.0",
   "versionCode": "100",
   "transformPx": false,

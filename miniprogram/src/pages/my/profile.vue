@@ -243,7 +243,7 @@ function goPage(url) {
 function showAbout() {
   uni.showModal({
     title: '关于系统',
-    content: '胜龙进销存系统 v2.1\n微信小程序 + Web 后台管理',
+    content: '文文进出库系统 v2.1\n微信小程序 + Web 后台管理',
     showCancel: false
   })
 }

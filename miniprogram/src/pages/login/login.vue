@@ -3,7 +3,7 @@
     <!-- 顶部 Logo -->
     <view class="logo-section">
       <view class="logo">🔧</view>
-      <text class="app-name">胜龙进销存</text>
+      <text class="app-name">文文进出库</text>
       <text class="app-desc">物资出入库与库存账目管理系统</text>
     </view>
 

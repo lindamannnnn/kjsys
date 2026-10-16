@@ -3,7 +3,7 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "胜龙进销存",
+        "navigationBarTitleText": "文文进出库",
         "navigationBarBackgroundColor": "#1a1a2e",
         "navigationBarTextStyle": "white"
       }
@@ -235,7 +235,7 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "white",
-    "navigationBarTitleText": "胜龙进销存",
+    "navigationBarTitleText": "文文进出库",
     "navigationBarBackgroundColor": "#1a1a2e",
     "backgroundColor": "#f5f5f5"
   },
