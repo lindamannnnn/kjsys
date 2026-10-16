@@ -17,7 +17,7 @@ export const APP_NAME = '胜龙进销存'
  * ⚠️ 本小程序注册主体为「个人」，此处必须是**开发者本人的真实姓名**（与公众平台实名一致），
  *    不得填公司/企业名称。产物里出现「有限公司」会被提审自检直接拦下。
  */
-export const OPERATOR_NAME = '肇庆市高要区鼎星五金实业有限公司'
+export const OPERATOR_NAME = '文彬'
 
 /** 联系邮箱（审核员和使用单位内部人员都会看，填一个真实可达的邮箱） */
 export const CONTACT_EMAIL = '360752942@qq.com'

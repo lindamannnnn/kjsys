@@ -3,7 +3,6 @@
     <!-- 顶部标题 -->
     <view class="header">
       <text class="title">胜龙进销存</text>
-      <text class="subtitle">{{ companyName }}</text>
     </view>
 
     <!-- 加载中 -->
@@ -228,7 +227,6 @@ import { warehouseApi, outboundApi, inboundApi, messageApi, purchaseApi } from '
 
 const userStore = useUserStore()
 
-const companyName = ref('胜龙汽配')
 const warehouseList = ref([])
 // 近 7 天自己提交、被仓管驳回的出库单
 const notices = ref([])
@@ -524,13 +522,6 @@ onMounted(() => {
     font-size: 48rpx;
     font-weight: bold;
     color: #1a1a2e;
-    display: block;
-  }
-
-  .subtitle {
-    font-size: 28rpx;
-    color: #666;
-    margin-top: 16rpx;
     display: block;
   }
 }
