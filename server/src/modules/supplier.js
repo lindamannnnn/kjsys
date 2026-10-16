@@ -96,6 +96,12 @@ async function remove(ctx, data = {}) {
   const id = toDbId(data.id || data._id)
   if (!id) return fail(400, '供应商 ID 无效')
 
+  // 先确认存在。否则「删一个根本不存在的供应商」会 UPDATE 影响 0 行，
+  // 却仍然回报「删除成功」—— 用户以为删掉了、实际什么都没发生。
+  // （2026-10-16 生产冒烟实测到这种假成功；material.remove 有这层校验，此处补齐对齐。）
+  const exists = await queryOne('SELECT id FROM suppliers WHERE id = ? AND is_deleted = 0 LIMIT 1', [id])
+  if (!exists) return fail(404, '供应商不存在')
+
   const used = await queryOne(
     'SELECT COUNT(*) AS c FROM inbound_orders WHERE supplier_id = ? AND is_deleted = 0',
     [id]

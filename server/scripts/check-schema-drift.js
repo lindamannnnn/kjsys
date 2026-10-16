@@ -58,10 +58,13 @@ function parseSchemaSql(sql) {
   return tables
 }
 
-async function main() {
+/**
+ * 执行自检，返回结构化结果（供 preflight 复用；不打印、不退出、不关连接池）
+ * @returns {Promise<{dbName:string, schemaTables:number, liveTables:number, errors:string[], notes:string[]}>}
+ */
+async function run() {
   if (!fs.existsSync(SCHEMA_FILE)) {
-    console.error(`❌ 找不到 ${SCHEMA_FILE}`)
-    process.exit(2)
+    throw new Error(`找不到 schema 文件：${SCHEMA_FILE}`)
   }
   const expect = parseSchemaSql(fs.readFileSync(SCHEMA_FILE, 'utf8'))
   const expectTables = Object.keys(expect)
@@ -111,38 +114,59 @@ async function main() {
     }
   }
 
-  // ---------- 输出 ----------
   const dbName = (await pool.query('SELECT DATABASE() AS d'))[0][0].d
-  console.log('==============================================')
-  console.log('  结构漂移自检：schema.sql  ⇄  当前数据库')
-  console.log(`  数据库：${dbName}`)
-  console.log(`  表数：schema.sql ${expectTables.length} / 库 ${Object.keys(live).filter((t) => !isBackup(t)).length}（不含 _bak）`)
-  console.log('==============================================\n')
 
-  if (!errors.length) {
-    console.log('✅ 无漂移：库结构与 schema.sql 一致\n')
-  } else {
-    console.log(`❌ 发现 ${errors.length} 处漂移（会导致功能报错，必须处理）：\n`)
-    errors.forEach((e, i) => console.log(`  ${i + 1}. ${e}`))
-    console.log('')
+  return {
+    dbName,
+    schemaTables: expectTables.length,
+    liveTables: Object.keys(live).filter((t) => !isBackup(t)).length,
+    errors,
+    notes
   }
-
-  if (notes.length) {
-    console.log(`ℹ️  ${notes.length} 处提示（不阻塞，多半是历史遗留）：`)
-    notes.forEach((n) => console.log(`     · ${n}`))
-    console.log('')
-  }
-
-  await pool.end()
-  process.exit(errors.length ? 1 : 0)
 }
 
-main().catch(async (err) => {
-  console.error('\n❌ 自检本身失败：', (err && err.message) || err)
-  try {
-    await pool.end()
-  } catch (e) {
-    /* 连接可能已断，忽略 */
+/** 打印报告（仅 CLI 使用；preflight 请直接用 run() 拿结构化结果） */
+function printReport(r) {
+  console.log('==============================================')
+  console.log('  结构漂移自检：schema.sql  ⇄  当前数据库')
+  console.log(`  数据库：${r.dbName}`)
+  console.log(`  表数：schema.sql ${r.schemaTables} / 库 ${r.liveTables}（不含 _bak）`)
+  console.log('==============================================\n')
+
+  if (!r.errors.length) {
+    console.log('✅ 无漂移：库结构与 schema.sql 一致\n')
+  } else {
+    console.log(`❌ 发现 ${r.errors.length} 处漂移（会导致功能报错，必须处理）：\n`)
+    r.errors.forEach((e, i) => console.log(`  ${i + 1}. ${e}`))
+    console.log('')
   }
-  process.exit(2)
-})
+
+  if (r.notes.length) {
+    console.log(`ℹ️  ${r.notes.length} 处提示（不阻塞，多半是历史遗留）：`)
+    r.notes.forEach((n) => console.log(`     · ${n}`))
+    console.log('')
+  }
+}
+
+module.exports = { run }
+
+if (require.main === module) {
+  main()
+}
+
+async function main() {
+  try {
+    const r = await run()
+    printReport(r)
+    await pool.end()
+    process.exit(r.errors.length ? 1 : 0)
+  } catch (err) {
+    console.error('\n❌ 自检本身失败：', (err && err.message) || err)
+    try {
+      await pool.end()
+    } catch (e) {
+      /* 连接可能已断，忽略 */
+    }
+    process.exit(2)
+  }
+}

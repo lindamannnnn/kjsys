@@ -57,6 +57,8 @@ admin/dist-local/
 **/tests/**/_bak_*/
 # 临时取证截图
 docs/.task-create-*.png
+# 闸门 / 冒烟跑出来的结果 JSON（脚本要入库，结果不入库）
+server/scripts/out/
 
 # ---------- 例外：需要入库的数据文件 ----------
 # 固化的配件编号数据（npm run apply:code 依赖，必须随仓库分发）
