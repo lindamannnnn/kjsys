@@ -13,15 +13,15 @@
 export const APP_NAME = '胜龙进销存'
 
 /** 运营/开发者主体名称 —— 与你在微信公众平台注册的主体一致 */
-export const OPERATOR_NAME = '【请填写小程序注册主体名称】'
+export const OPERATOR_NAME = '肇庆市高要区鼎星五金实业有限公司'
 
 /** 联系邮箱（审核员和企业员工都会看，填一个真实可达的邮箱） */
-export const CONTACT_EMAIL = '【请填写联系邮箱】'
+export const CONTACT_EMAIL = '360752942@qq.com'
 
 /** 联系电话 */
-export const CONTACT_PHONE = '【请填写联系电话】'
+export const CONTACT_PHONE = '13642992418'
 
 /** 政策版本与日期（内容有实质修改时，更新日期要跟着改） */
 export const DOC_VERSION = 'v1.0'
-export const UPDATE_DATE = '2026年10月1日'
-export const EFFECT_DATE = '2026年10月1日'
+export const UPDATE_DATE = '2026年10月16日'
+export const EFFECT_DATE = '2026年10月16日'
