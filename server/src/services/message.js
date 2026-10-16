@@ -7,6 +7,10 @@
  *     - 列表查询只走 to_openid 索引，不必联表判角色。
  *   代价是按角色广播时会写多行 —— 本系统使用人数在十位数，可以忽略。
  *
+ * ⚠️ to_openid 存的是「收件人键」：openid 优先，后台账号（无 openid）用 username 兜底。
+ *    小程序查自己的消息时按自己的 openid 查，所以 username 键的行小程序看不到
+ *    （无 openid 的账号本来也进不了小程序）；但这些行**企业微信推得出去**。
+ *
  * 事务：所有函数都接受可选的 conn（事务连接）。
  *       业务状态变更与消息投递应当放在同一事务里，
  *       避免出现「单据状态已经改了、消息却没发出去」。
@@ -30,7 +34,24 @@ const MSG_TYPE = {
   WARNING_NOTIFY: 'warning_notify'                  // 库存预警通知采购 → 通知采购员/仓管
 }
 
-/** 把角色展开为「启用中」账号的 openid 列表（去重） */
+/**
+ * 收件人键（recipient key）
+ * ------------------------------------------------------------
+ * 「谁该收」用一个字符串表示：
+ *   · 小程序账号（微信登录进来的）→ 用 **openid**
+ *   · 后台账号（管理员在「用户管理→新增用户」建的，**没有 openid**）→ 用 **username**
+ *
+ * ⚠️ 为什么必须有 username 兜底（2026-10-16 投产前发现）：
+ *   原本只认 openid，而后台建的账号 openid 恒为空 → 它们全部被过滤掉，
+ *   变成「消息黑洞」：站内信、企业微信**一条都收不到**。
+ *   实测生产：按角色 [storekeeper]/[director]/[boss]… 广播，能收到的人数全是 **0**。
+ *   而企业微信推送根本不需要 openid，只要有 wecom_userid 就够 —— 不该被这条连坐。
+ */
+const WHO_SQL = "COALESCE(NULLIF(openid, ''), NULLIF(username, ''))"
+/** 只取「有收件人键」的账号（openid 或 username 至少有一个） */
+const WHO_OK_SQL = `${WHO_SQL} IS NOT NULL AND ${WHO_SQL} <> ''`
+
+/** 把角色展开为「启用中」账号的收件人键列表（去重） */
 async function openidsByRoles(roles = [], conn = null) {
   const list = (roles || []).filter(Boolean)
   if (!list.length) return []
@@ -39,20 +60,19 @@ async function openidsByRoles(roles = [], conn = null) {
   // 这里不用 JSON_OVERLAPS，是为了兼容 MySQL 5.7（该函数 8.0 才有）。
   const conds = list.map(() => 'JSON_CONTAINS(roles, JSON_QUOTE(?))').join(' OR ')
   const rows = await query(
-    `SELECT openid
+    `SELECT ${WHO_SQL} AS who
        FROM users
       WHERE status = 'active'
-        AND openid IS NOT NULL
-        AND openid <> ''
+        AND ${WHO_OK_SQL}
         AND (${conds})`,
     list,
     conn
   )
-  return rows.map((r) => r.openid)
+  return rows.map((r) => r.who).filter(Boolean)
 }
 
 /**
- * 按「角色 + 可管仓库」取 openid（去重）
+ * 按「角色 + 可管仓库」取收件人键（去重）
  * 用途：通知到真正管这个仓的仓管，而不是全公司所有仓管都收到
  * （仓库没给或没人匹配时由调用方决定是否回退为全角色广播）
  * @param {string[]} roles
@@ -65,24 +85,23 @@ async function openidsByWarehouseRoles(roles = [], warehouseId = null, conn = nu
 
   const conds = list.map(() => 'JSON_CONTAINS(roles, JSON_QUOTE(?))').join(' OR ')
   const rows = await query(
-    `SELECT openid
+    `SELECT ${WHO_SQL} AS who
        FROM users
       WHERE status = 'active'
-        AND openid IS NOT NULL
-        AND openid <> ''
+        AND ${WHO_OK_SQL}
         AND (${conds})
         AND JSON_VALID(warehouse_ids)
         AND JSON_CONTAINS(warehouse_ids, CAST(? AS JSON))`,
     [...list, String(warehouseId)],
     conn
   )
-  return rows.map((r) => r.openid)
+  return rows.map((r) => r.who).filter(Boolean)
 }
 
 /**
  * 投递一条消息
  * @param {object} opt
- * @param {string[]} [opt.toOpenids] 指定接收人 openid
+ * @param {string[]} [opt.toOpenids] 指定接收人（收件人键：openid 或 username）
  * @param {string[]} [opt.toRoles]   按角色投递（自动展开为该角色下所有启用账号）
  * @param {string}   opt.type        类型码，见 MSG_TYPE
  * @param {string}   opt.title       标题（中文，界面直接展示）
@@ -141,7 +160,7 @@ async function pushMessage(opt = {}, conn = null) {
   if (wecom.isEnabled() && targets.length) {
     const text = `【${title}】${content || ''}`.trim()
     setImmediate(() => {
-      pushWecomToOpenids(targets, text).catch((e) => console.warn('[企微] 异步推送失败：', e.message))
+      pushWecomToRecipients(targets, text).catch((e) => console.warn('[企微] 异步推送失败：', e.message))
     })
   }
 
@@ -149,14 +168,26 @@ async function pushMessage(opt = {}, conn = null) {
 }
 
 /**
- * 把消息按 openid 推到对应员工的企业微信（只推给绑定了 wecom_userid 的）。
+ * 把消息推到对应员工的**企业微信**（只推给绑定了 wecom_userid 的）。
+ * @param {string[]} keys 收件人键（openid 或 username，见 WHO_SQL）
+ *
+ * ⚠️ 匹配时**openid 和 username 两个字段都试**：
+ *    小程序账号的键是 openid，后台建的账号键是 username（它没有 openid）。
+ *    企业微信推送本来就不需要 openid —— 只要绑了企微账号就该收得到。
  * 内部函数，不在模块导出 —— 业务侧只调 pushMessage。
  */
-async function pushWecomToOpenids(openids, text) {
-  const ph = openids.map(() => '?').join(',')
+async function pushWecomToRecipients(keys, text) {
+  const list = Array.from(new Set((keys || []).filter(Boolean)))
+  if (!list.length) return { sent: 0 }
+  const ph = list.map(() => '?').join(',')
   const rows = await query(
-    `SELECT wecom_userid FROM users WHERE openid IN (${ph}) AND wecom_userid <> ''`,
-    openids
+    `SELECT wecom_userid
+       FROM users
+      WHERE status = 'active'
+        AND wecom_userid IS NOT NULL
+        AND wecom_userid <> ''
+        AND (openid IN (${ph}) OR username IN (${ph}))`,
+    [...list, ...list]
   )
   const ids = rows.map((r) => r.wecom_userid).filter(Boolean)
   if (!ids.length) return { sent: 0 }
