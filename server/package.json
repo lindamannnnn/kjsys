@@ -28,7 +28,9 @@
     "db:migrate-outbound": "node src/db/migrate-outbound-4stage.js",
     "db:apply-purchase": "node src/db/apply-purchase-tables.js",
     "wecom:test": "node scripts/test-wecom.js",
-    "wecom:users": "node scripts/wecom-list-users.js"
+    "wecom:users": "node scripts/wecom-list-users.js",
+    "backup": "bash scripts/backup-mysql.sh",
+    "restore:drill": "sudo bash tests/restore-drill.sh"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

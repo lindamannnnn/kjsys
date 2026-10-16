@@ -1,0 +1,8 @@
+[Unit]
+Description=Shenglong ERP MySQL backup (胜龙进销存生产库每日备份)
+After=mysql.service
+Requires=mysql.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/shenglong/backup-mysql.sh

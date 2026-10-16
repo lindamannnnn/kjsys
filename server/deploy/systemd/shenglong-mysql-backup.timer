@@ -1,0 +1,9 @@
+[Unit]
+Description=每日 03:40 备份胜龙进销存生产库
+
+[Timer]
+OnCalendar=*-*-* 03:40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
