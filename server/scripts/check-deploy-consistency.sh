@@ -64,42 +64,61 @@ if [ ! -s "$TMP/d" ]; then
   exit 0
 fi
 
-LOCAL_ONLY=$(grep -c '^<' "$TMP/d" || true)
-REMOTE_ONLY=$(grep -c '^>' "$TMP/d" || true)
-
-echo "❌ 有差异（本地有而生产没有：$LOCAL_ONLY 条 / 生产有而本地没有：$REMOTE_ONLY 条）"
-echo
-echo "  下面「本地文件路径 哈希」里，与生产不同的那些："
-echo
-
-# 逐行列出，并尽量配上「同一文件两边哈希」的对照
-awk '/^< /{lf=$2; lh=$3} /^> /{print lf" | 本地 "lh" | 生产 "$3}' "$TMP/d" | while IFS= read -r line; do
-  echo "  · $line"
-done
-
-# 只在一边存在的文件（漏传 / 多传）。
-# ⚠️ 不能直接拿 diff 的 < / > 行当「只在一边」—— 内容不同的文件两侧都会出现，
-#    那样会把「内容不同」误报成「文件不存在」。必须按文件名集合求差。
+# ---------- 分类：只在一边（漏传/多传） vs 两边都有但内容不同 ----------
+# ⚠️ 不能拿 diff 的 < / > 行数直接当结论 —— 内容不同的文件**两侧都会出现**，
+#    那样会把「内容不同」说成「文件不存在」（措辞误导过一次，必须按文件名集合求差）。
 grep '^< ' "$TMP/d" | awk '{print $2}' | sort -u > "$TMP/lf" || true
 grep '^> ' "$TMP/d" | awk '{print $2}' | sort -u > "$TMP/pf" || true
-LOCAL_ONLY_FILES=$(comm -23 "$TMP/lf" "$TMP/pf" || true)
-REMOTE_ONLY_FILES=$(comm -13 "$TMP/lf" "$TMP/pf" || true)
+comm -23 "$TMP/lf" "$TMP/pf" > "$TMP/onlyL" || true # 只在本地 = 漏传
+comm -13 "$TMP/lf" "$TMP/pf" > "$TMP/onlyR" || true # 只在生产 = 多传/手改
+comm -12 "$TMP/lf" "$TMP/pf" > "$TMP/both" || true  # 两边都有，内容不同
 
-if [ -n "$LOCAL_ONLY_FILES" ]; then
+cnt() { if [ -s "$1" ]; then grep -c . "$1"; else echo 0; fi; }
+lookup() { awk -v k="$1" '$1==k{print $2}' "$2"; }
+
+echo "❌ 有差异：同名但内容不同 $(cnt "$TMP/both") 个 / 只在本地 $(cnt "$TMP/onlyL") 个 / 只在生产 $(cnt "$TMP/onlyR") 个"
+echo
+
+if [ -s "$TMP/onlyL" ]; then
+  echo "  ⚠️ 只在本地存在（**生产缺这些文件 = 漏传**）："
+  while IFS= read -r f; do [ -n "$f" ] && echo "     · $f  （本地 $(lookup "$f" "$TMP/L")）"; done < "$TMP/onlyL"
   echo
-  echo "  ⚠️ 只在本地存在（生产缺这些文件）："
-  echo "$LOCAL_ONLY_FILES" | sed 's/^/     /'
 fi
-if [ -n "$REMOTE_ONLY_FILES" ]; then
+
+if [ -s "$TMP/onlyR" ]; then
+  echo "  ⚠️ 只在生产存在（本地没有 = 可能被手工改过，需要回写仓库）："
+  while IFS= read -r f; do [ -n "$f" ] && echo "     · $f  （生产 $(lookup "$f" "$TMP/P")）"; done < "$TMP/onlyR"
   echo
-  echo "  ⚠️ 只在生产存在（本地没有，可能被手工改过）："
-  echo "$REMOTE_ONLY_FILES" | sed 's/^/     /'
 fi
-if [ -z "$LOCAL_ONLY_FILES" ] && [ -z "$REMOTE_ONLY_FILES" ]; then
+
+if [ -s "$TMP/both" ]; then
+  echo "  ⚠️ 同名但内容不同（上线后会被本地版本覆盖，先确认生产上没有需要保留的手工改动）："
+  while IFS= read -r f; do
+    [ -n "$f" ] && echo "     · $f   本地 $(lookup "$f" "$TMP/L") / 生产 $(lookup "$f" "$TMP/P")"
+  done < "$TMP/both"
+fi
+
+# ---------- 差异明细：把前 3 个文件的真实 diff 打出来 ----------
+# 目的：让人**一眼看出是实质改动还是只改了注释**，而不是对着哈希猜。
+# 这一步直接决定「要不要重启服务」—— 只改注释不必重启，改了代码必须重启。
+if [ -s "$TMP/both" ]; then
   echo
-  echo "  （文件个数一致，差异都是「同名文件内容不同」——上线后会被新版本覆盖，注意确认）"
+  echo "  ---- 差异明细（最多 3 个文件；< 本地 / > 生产）----"
+  head -3 "$TMP/both" | while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    # ⚠️ ssh 必须带 -n：否则它会把管道里剩下的文件名当 stdin 吃掉，
+    #    循环只跑第一轮（踩过：3 个差异文件只打印了 1 个的明细）。
+    ssh -n -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$SSH_TARGET" \
+      "cat '$REMOTE_SERVER_DIR/$f'" 2>/dev/null | tr -d '\r' > "$TMP/r"
+    tr -d '\r' < "$LOCAL_SERVER_DIR/$f" > "$TMP/l"
+    echo
+    echo "  === $f ==="
+    diff "$TMP/l" "$TMP/r" | head -12 | sed 's/^/     /'
+    echo "     …… 共 $(diff "$TMP/l" "$TMP/r" | grep -cE '^[<>]' || true) 行不同"
+  done
 fi
 
 echo
 echo "  → 处理：把本地版本补传上去（或确认生产上的手工改动是否需要回写到仓库），再跑一次。"
+echo "     传完**记得重启后端**：改了代码不重启 = 文件新、进程旧，这个检查看不出来。"
 exit 1
