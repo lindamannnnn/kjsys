@@ -245,6 +245,41 @@ if (fs.existsSync(legalPath)) {
   rec('must', '协议主体信息', 'src/utils/legal.js 不存在，协议内容会引用失败')
 }
 
+// 2.5) 主体类型自洽：本小程序注册主体是**个人**
+//      （2026-10-16 踩到：协议里误填了「XX有限公司」，且正文多处称「本企业」）
+if (fs.existsSync(legalPath)) {
+  const opName = (fs.readFileSync(legalPath, 'utf8')
+    .match(/OPERATOR_NAME\s*=\s*'([^'\n]*)'/) || [])[1] || ''
+  if (opName && /公司|有限|集团|企业|厂/.test(opName)) {
+    rec('must', '运营者主体与「个人主体」自洽',
+      `OPERATOR_NAME = 「${opName}」像企业名称，但本小程序注册主体是**个人** → ` +
+      `必须改成开发者本人真实姓名（与公众平台实名一致），否则协议的运营者与备案主体对不上`)
+  } else if (opName) {
+    rec('info', '运营者主体与「个人主体」自洽', `OPERATOR_NAME = 「${opName}」（个人姓名 ✓）`)
+  }
+}
+
+// 2.6) 审核可见页面不得用「本企业 / 企业内部」等企业主体口吻
+const ENT_SCOPE_FILES = [
+  'src/pages/index/index.vue',
+  'src/pages/login/login.vue',
+  'src/pages/agreement/user.vue',
+  'src/pages/agreement/privacy.vue'
+]
+const entHits = []
+for (const rel of ENT_SCOPE_FILES) {
+  const p = path.join(ROOT, rel)
+  if (!fs.existsSync(p)) continue
+  const n = (fs.readFileSync(p, 'utf8').match(/本企业|企业内部/g) || []).length
+  if (n) entHits.push(`${rel}（${n} 处）`)
+}
+if (entHits.length) {
+  rec('must', '企业主体口吻（个人主体不适用）',
+    `${entHits.join('、')} 出现「本企业/企业内部」→ 个人主体这样写对不上，统一改「使用单位」口径`)
+} else {
+  rec('info', '企业主体口吻（个人主体不适用）', '审核可见页面均无「本企业」口吻 ✓')
+}
+
 // 3) 登录页必须有「主动同意协议」步骤，且不得默认勾选
 const loginPath = path.join(ROOT, 'src/pages/login/login.vue')
 if (fs.existsSync(loginPath)) {

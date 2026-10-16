@@ -4,7 +4,7 @@
     <view class="logo-section">
       <view class="logo">🔧</view>
       <text class="app-name">胜龙进销存</text>
-      <text class="app-desc">胜龙汽配内部管理系统</text>
+      <text class="app-desc">单位内部物资出入库管理系统</text>
     </view>
 
     <!-- 登录表单 -->
@@ -90,7 +90,7 @@
 
     <!-- 底部说明 -->
     <view class="footer">
-      <text class="footer-text">仅限胜龙汽配内部员工使用</text>
+      <text class="footer-text">仅限使用单位内部人员使用</text>
     </view>
   </view>
 </template>

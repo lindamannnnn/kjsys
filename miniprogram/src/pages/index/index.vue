@@ -14,10 +14,10 @@
     <!-- 未登录：先展示系统介绍，不做登录墙（审核要求：先让用户了解，再要求登录） -->
     <view v-else-if="!isLoggedIn" class="intro">
       <view class="intro-card">
-        <text class="intro-lead">企业内部物资出入库管理系统</text>
+        <text class="intro-lead">单位内部物资出入库管理系统</text>
         <text class="intro-text">
-          本系统用于记录和管理本企业自有物资的入库、领料出库、库存盘点与库存账目，
-          让每一笔物资的流向都能追溯到经手人，方便企业内部对账与管理。
+          本系统用于记录和管理使用单位自有物资的入库、领料出库、库存盘点与库存账目，
+          让每一笔物资的流向都能追溯到经手人，方便使用单位内部对账与管理。
         </text>
       </view>
 
@@ -70,7 +70,7 @@
       <view class="intro-card notice-card-plain">
         <text class="notice-title-plain">使用说明</text>
         <text class="notice-text-plain">
-          本系统仅面向本企业员工开放使用，不面向社会公众提供服务。
+          本系统仅面向使用单位内部人员开放使用，不面向社会公众提供服务。
           首次使用时请用微信登录并填写真实姓名，由管理员审核通过、分配岗位权限后即可开始使用。
         </text>
       </view>
