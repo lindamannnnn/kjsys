@@ -496,6 +496,26 @@ async function logs(ctx, data = {}) {
  */
 async function assignees(ctx, data = {}) {
   const { keyword } = data
+
+  /**
+   * ⚠️ 这里是全系统**唯一**刻意用「openid 有无」筛人的地方，已显式豁免 lint（见下方标记）。
+   *
+   * 理由：盘点执行人必须能在**小程序**里执行 / 确认盘点，而小程序登录是
+   *       `SELECT * FROM users WHERE openid = ?`（modules/auth.js login）——
+   *       没有 openid 的账号永远匹配不上，登进去只会另建一个 pending 账号。
+   *       所以「有 openid」= 「能真正执行盘点的人」。
+   *
+   * 2026-10-16 经生产库核实（此前一度误判为缺陷，特此留档）：
+   *   · 文彬 id=41（2026-10-14 建，**有 openid**）—— 系统目前唯一真实人员，兼 boss/out/storekeeper
+   *   · 张三/李娜/赵六/王总 id=7~10（2026-09-29 17:37:46 同一秒批量建成，**无 openid**）
+   *     —— 演示账号，本就登不进小程序
+   *   → 下拉只出 1 人 = 生产真实情况，不是 bug。
+   *   前一次「赵六当盘点执行人」的"证据"，实为本次盘查时自建的测试盘点单（116），不作数。
+   *
+   * 已知副作用（须知，非缺陷）：后台手工建的真实员工账号，在其本人用小程序登录前，
+   *   不会出现在此下拉里。正规入职路径 = 员工先从小程序进来建号 → 后台审核并分配角色。
+   */
+  // preflight-allow: BARE-OPENID-NULL — 盘点执行人须能登录小程序执行盘点，无 openid 账号登不进
   const where = ["status = 'active'", 'openid IS NOT NULL', "openid <> ''"]
   const params = []
 

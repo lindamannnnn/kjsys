@@ -81,10 +81,25 @@ function isAllowed(rel) {
  * 显式豁免：允许某一行「明知故犯」，但必须写明理由，且要留下痕迹。
  * 写法（该行或上一行）：  // preflight-allow: BARE-OPENID-NULL — 理由
  * 注意：豁免检测必须用**未去注释**的原文，因为豁免标记本身就在注释里。
+ *
+ * ⚠️ 豁免**必须在输出里可见**（含理由）。否则「豁免」就等于静默消音，
+ *    而静默消音正是让缺陷藏起来的标准手法 —— 那就白做这道闸门了。
+ *
+ * 返回：{ waived, reason }
  */
-function isWaived(rawLines, idx, ruleId) {
-  const re = new RegExp(`preflight-allow:\\s*${ruleId}`)
-  return re.test(rawLines[idx] || '') || re.test(rawLines[idx - 1] || '')
+function waiverOf(rawLines, idx, ruleId) {
+  const mk = new RegExp(`preflight-allow:\\s*${ruleId}`)
+  for (const line of [rawLines[idx] || '', rawLines[idx - 1] || '']) {
+    const at = mk.exec(line)
+    if (at) {
+      const reason = line
+        .slice(at.index + at[0].length)
+        .replace(/^[\s—–\-*\/]+/, '') // 去掉分隔符与注释尾巴
+        .trim()
+      return { waived: true, reason: reason || '(未写理由)' }
+    }
+  }
+  return { waived: false, reason: '' }
 }
 
 function lint() {
@@ -107,8 +122,9 @@ function lint() {
       //    因为连 auth 里也不该用「openid 非空」来筛人）
       RE_BARE_NULL.lastIndex = 0
       if (RE_BARE_NULL.test(line)) {
-        if (isWaived(rawLines, i, 'BARE-OPENID-NULL')) {
-          waived.push({ file: rel, line: lineNo, snippet, id: 'BARE-OPENID-NULL' })
+        const w = waiverOf(rawLines, i, 'BARE-OPENID-NULL')
+        if (w.waived) {
+          waived.push({ file: rel, line: lineNo, snippet, id: 'BARE-OPENID-NULL', reason: w.reason })
         } else {
           errors.push({ file: rel, line: lineNo, snippet, id: 'BARE-OPENID-NULL' })
         }
@@ -143,6 +159,16 @@ async function main() {
     console.log('  或写成 (openid = ? OR username = ?) 两边都匹配。\n')
   } else {
     console.log('✅ 没有发现「用 openid 有无筛人」的写法\n')
+  }
+
+  // 豁免项必须可见（含理由）—— 否则闸门等于被静默关掉
+  if (r.waived.length) {
+    console.log(`ℹ️  显式豁免 ${r.waived.length} 处（**已知设计**，非缺陷；理由必须可审阅）：`)
+    r.waived.forEach((w) => {
+      console.log(`     · ${w.file}:${w.line}  [${w.id}]`)
+      console.log(`       理由：${w.reason}`)
+    })
+    console.log('')
   }
 
   if (r.warns.length) {

@@ -71,7 +71,13 @@ async function main() {
   // ---------- ① 身份口径 lint（纯静态，不依赖库） ----------
   const s1 = await runCheck('identity', '身份口径 lint（禁止用 openid 有无筛人）', async () => {
     const r = identity.lint()
-    return { status: r.errors.length ? 'FAIL' : 'PASS', errors: r.errors, warns: r.warns, scanned: r.scanned }
+    return {
+      status: r.errors.length ? 'FAIL' : 'PASS',
+      errors: r.errors,
+      warns: r.warns,
+      waived: r.waived,
+      extra: `${r.scanned} 文件${r.waived.length ? ` / 豁免 ${r.waived.length}` : ''}`
+    }
   })
 
   // ---------- ② 结构漂移 ----------
@@ -129,6 +135,11 @@ async function main() {
     if (s.errors && s.errors.length) {
       shorten(s.errors).forEach((e, i) => console.log(`     ${i + 1}. ${fmtErr(e)}`))
       if (s.errors.length > 12) console.log(`     …… 其余 ${s.errors.length - 12} 项省略`)
+    }
+
+    if (s.waived && s.waived.length) {
+      console.log(`     ℹ️  显式豁免 ${s.waived.length} 处（已知设计，理由可审阅）：`)
+      s.waived.forEach((w) => console.log(`        · ${w.file}:${w.line}  ${w.reason || ''}`))
     }
 
     if (s.warns && s.warns.length) {
