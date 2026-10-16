@@ -18,9 +18,17 @@
  *      被驳回/作废时也能正确回补。
  *      rejected / cancelled 保持 stock_deducted=0（老流程当时已回补过）。
  *
+ * ⚠️ 数据段默认**不执行**（2026-10-16 加固）：
+ *   下面【3】的历史数据 UPDATE 只在「老流程（提交即扣库存）」的库上成立。
+ *   若在**已经是新流程**的库上跑（出库提交不扣、收货才扣），
+ *   会把待确认单的 stock_deducted 误标为 1 → 以后确认收货时库存**永远不扣**（静默数据错误）。
+ *   所以改成显式开关：默认只做结构，真要处理历史数据得加 --with-legacy-data。
+ *
  * 用法：
- *   npm run db:migrate-outbound        # 预演，只报告不写库
- *   npm run db:migrate-outbound -- --apply   # 真正执行
+ *   npm run db:migrate-outbound                       # 预演（只读）
+ *   npm run db:migrate-outbound -- --apply            # 只做结构（枚举 + 补列），推荐
+ *   npm run db:migrate-outbound -- --apply --with-legacy-data
+ *                                                     # ⚠️ 连历史数据一起改，仅限老流程的库
  *
  * 幂等：重复执行安全（列已存在则跳过，数据 UPDATE 只影响指定状态的单）。
  * ============================================================
@@ -64,10 +72,12 @@ async function tableExists() {
 
 async function main() {
   const apply = process.argv.includes('--apply')
+  const withLegacyData = process.argv.includes('--with-legacy-data')
 
   console.log('==============================================')
   console.log('  迁移：出库单 2 态 → 4 态（领料线）')
   console.log(`  模式：${apply ? '★ 执行（写库）' : '预演（只读，不改任何数据）'}`)
+  console.log(`  数据段：${withLegacyData ? '⚠️ 启用（会改历史单的 stock_deducted）' : '跳过（只做结构，默认）'}`)
   console.log('==============================================\n')
 
   if (!(await tableExists())) {
@@ -126,16 +136,17 @@ async function main() {
 
   console.log('【3】历史数据')
   console.log(`   单据总数：${totalCount}`)
-  console.log(`   待处理（迁移前已扣过库存）：${legacyTotal} 张`)
+  console.log(`   当前 pending/confirmed 单：${legacyTotal} 张`)
   console.log(`     · confirmed → 转为 completed 并标记已扣：${confirmedCount} 张`)
-  console.log(`     · pending   → 保持待确认，但标记已扣（避免以后重复扣）：${pendingCount} 张`)
-  console.log(`   → 这些单走到「确认收货」时不会再扣一次；被驳回/作废时能正确回补`)
-  console.log(`   → 已驳回 / 已作废的历史单保持「未扣」，行为不变\n`)
+  console.log(`     · pending   → 保持待确认，但标记已扣：${pendingCount} 张`)
+  console.log(`   数据段本次：${withLegacyData ? '⚠️ 会执行（仅当这些单来自「提交即扣库存」的老流程才正确）' : '跳过（默认只做结构）'}`)
+  console.log('   ⚠️ 判断依据：老流程=提交就扣库存 → 要标 1；新流程=收货才扣 → 必须保持 0。\n')
 
   if (!apply) {
     console.log('----------------------------------------------')
     console.log('预演结束，未改动任何数据。')
-    console.log('确认无误后执行：npm run db:migrate-outbound -- --apply')
+    console.log('只做结构：npm run db:migrate-outbound -- --apply')
+    console.log('连数据改：npm run db:migrate-outbound -- --apply --with-legacy-data')
     console.log('----------------------------------------------')
     await pool.end()
     return
@@ -159,21 +170,30 @@ async function main() {
     console.log(`   ✓ 已新增列 ${col.name}`)
   }
 
-  // 历史 confirmed 单：转 completed 并标记已扣库存
-  const [upd1] = await pool.query(
-    `UPDATE \`${TABLE}\`
-        SET status = 'completed', stock_deducted = 1
-      WHERE status = 'confirmed'`
-  )
-  console.log(`   ✓ 历史 confirmed 单已转为 completed，影响 ${upd1.affectedRows} 行`)
+  if (withLegacyData) {
+    // 历史 confirmed 单：转 completed 并标记已扣库存
+    const [upd1] = await pool.query(
+      `UPDATE \`${TABLE}\`
+          SET status = 'completed', stock_deducted = 1
+        WHERE status = 'confirmed'`
+    )
+    console.log(`   ✓ 历史 confirmed 单已转为 completed，影响 ${upd1.affectedRows} 行`)
 
-  // 历史 pending 单：库存其实已扣（老流程提交即扣），补标记，防止将来重复扣
-  const [upd2] = await pool.query(
-    `UPDATE \`${TABLE}\`
-        SET stock_deducted = 1
-      WHERE status = 'pending' AND stock_deducted = 0`
-  )
-  console.log(`   ✓ 历史 pending 单已标记为「库存已扣」，影响 ${upd2.affectedRows} 行`)
+    // 历史 pending 单：库存其实已扣（老流程提交即扣），补标记，防止将来重复扣
+    const [upd2] = await pool.query(
+      `UPDATE \`${TABLE}\`
+          SET stock_deducted = 1
+        WHERE status = 'pending' AND stock_deducted = 0`
+    )
+    console.log(`   ✓ 历史 pending 单已标记为「库存已扣」，影响 ${upd2.affectedRows} 行`)
+  } else {
+    console.log('   · 数据段已跳过（默认）—— 结构已对齐，历史数据保持原样')
+    if (legacyTotal > 0) {
+      console.log(`     ⚠️ 但当前库里有 ${legacyTotal} 张 pending/confirmed 单。`)
+      console.log('        若它们来自「老流程（提交即扣库存）」，需要用 --with-legacy-data 补 stock_deducted=1；')
+      console.log('        若来自「新流程（收货才扣）」，跳过才是对的（当前就是这种情况）。')
+    }
+  }
 
   // ---------- 复核 ----------
   console.log('\n【复核】')

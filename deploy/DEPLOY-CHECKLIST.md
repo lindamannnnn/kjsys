@@ -173,7 +173,26 @@ grep -E '^(NODE_ENV|ALLOW_DESTRUCTIVE|ALLOW_DEV_LOGIN)' .env
 
 # 2. 安全闸门自检：应全部通过（其中「生产环境发 DELETE 被拦截」必须为 ✅）
 npm run test:security
+
+# 3. ★ 结构漂移自检：库结构 与 src/db/schema.sql 必须一致（退出码非 0 即为不一致，别上线）
+npm run db:check-schema
 ```
+
+### ⚠️ 为什么第 3 条是必须的（2026-10-16 生产事故）
+
+生产库 `outbound_orders` 停留在**早期结构**：`status` 枚举只有
+`pending/confirmed/cancelled/rejected`，且缺 `pick_operator_openid` 等 **7 个列**；
+而代码早按 4 态流程写 `picking` / `receiving` / `completed`。结果：
+
+> 仓管点「确认」→ MySQL 抛 `Data truncated for column 'status' at row 1`
+> → **出库的后半段（确认 / 拣货 / 收货 / 扣库存）在生产全部走不通**
+
+**这类问题极难在部署时发现**：代码 review 看不出来（代码是对的）、
+单元测试看不出来（测试库是自己新建的）、接口冒烟也看不出来（没走完整业务链）——
+**只有真人点下去才会炸**。所以把它变成一条可执行的门禁命令。
+
+> 判据：**错误**=库缺表 / 库缺列 / 列类型不一致（会让功能报错，必须处理）；
+> **提示**=库多出的列或 `_bak*` 备份表（不阻塞）。
 
 ## 三、⛔ 绝对禁止在生产执行的脚本
 
@@ -186,7 +205,7 @@ npm run test:security
 - 任何 `tests/` 下的测试套件
 
 **生产允许执行的数据库脚本**（幂等、非破坏）：
-`npm run db:init`、`npm run db:seed`、`npm run import:materials`、`npm run db:migrate*`、`npm run db:reset-admin`
+`npm run db:init`、`npm run db:seed`、`npm run import:materials`、`npm run db:migrate*`、`npm run db:reset-admin`、`npm run db:check-schema`（只读自检）
 
 ## 四、保护机制说明
 

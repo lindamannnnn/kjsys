@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS `inbound_orders` (
   `type`                     VARCHAR(32)  NOT NULL DEFAULT 'purchase' COMMENT '采购入库/销售退货/调整',
   `supplier`                 VARCHAR(128) NOT NULL DEFAULT '',
   `supplier_id`              BIGINT UNSIGNED DEFAULT NULL,
+  `source_item_id`           BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '这张入库单由哪条采购明细生成（purchase_task_items.id，0=非采购生成）',
   `total_price`              DECIMAL(14,2) NOT NULL DEFAULT 0.00,
   `operator_openid`          VARCHAR(64)  NOT NULL DEFAULT '',
   `operator_name`            VARCHAR(64)  NOT NULL DEFAULT '',
@@ -194,6 +195,7 @@ CREATE TABLE IF NOT EXISTS `inbound_orders` (
   KEY `idx_in_status`   (`status`, `created_at`),
   KEY `idx_in_wh`       (`warehouse_id`, `created_at`),
   KEY `idx_in_supplier` (`supplier`),
+  KEY `idx_source_item` (`source_item_id`),
   KEY `idx_in_created`  (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='入库单';
 
@@ -406,6 +408,7 @@ CREATE TABLE IF NOT EXISTS `purchase_task_items` (
   `external_no`   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '该项外部单号',
   `receive_status` VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT '到货确认：pending/received/returned',
   `received_qty`  DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '实到数量',
+  `stocked_qty`   DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '累计已入账数量（已生成入库单的数量，与实到数量的差额=待入库）',
   `return_reason` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '退货原因',
   `remark`        VARCHAR(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`),
