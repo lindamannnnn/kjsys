@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>提审录屏台本 · 文文进出库</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    margin: 0; padding: 24px 20px 40px; background: #fff; color: #1a1a1a;
+    font-size: 13px; line-height: 1.55;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: #666; font-size: 12.5px; margin: 0 0 18px; }
+  h2 { font-size: 14px; font-weight: 600; margin: 22px 0 8px; padding-bottom: 5px; border-bottom: 1px solid #e5e5e5; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 6px; table-layout: fixed; }
+  th, td { border: 1px solid #dedede; padding: 6px 8px; vertical-align: top; text-align: left; }
+  th { background: #f6f6f6; font-weight: 600; font-size: 12px; color: #444; }
+  td.t { white-space: nowrap; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #555; width: 74px; }
+  td.a { width: 44%; }
+  .say { color: #0b5cad; }
+  .key { background: #fff6e5; }
+  .warn { background: #fff4f2; border: 1px solid #f3c9c2; border-radius: 6px; padding: 10px 12px; margin: 0 0 16px; }
+  .warn b { color: #b3261e; }
+  ul { margin: 6px 0; padding-left: 20px; }
+  li { margin: 3px 0; }
+  .must { margin-top: 6px; }
+  .must td { background: #fbfbfb; }
+  .foot { margin-top: 20px; color: #888; font-size: 11.5px; }
+  code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+  @media print {
+    body { padding: 0; font-size: 11.5px; }
+    h2 { margin: 14px 0 6px; }
+    th, td { padding: 4px 6px; }
+    .warn { background: #fff; }
+    .key { background: #fff; }
+  }
+  @page { margin: 12mm; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>提审录屏台本 · 文文进出库</h1>
+  <p class="sub">目标 1'50"~2'00" ｜ 手机真机竖屏录 ｜ 演示物料用「<b>夹板</b>」（库存 100，随便填都不会不足）</p>
+
+  <div class="warn">
+    <b>⚠️ 开录前 30 秒，这四件必做</b>
+    <ul>
+      <li><b>长按</b>控制中心那个「◎」圆圈图标（点一下不行）→ 面板里点亮「<b>麦克风</b>」<br>
+          <span style="color:#b3261e">不点亮 = 全程无声，白录一遍</span></li>
+      <li>勿扰模式开、竖屏锁定、亮度调高、电量 &gt; 50%</li>
+      <li>首页能看到<b>功能卡片</b>（若显示「账号审核中」→ 点「刷新状态」）</li>
+      <li>⭐ <b>先不录、静默走一遍</b>，确认每步都点得到</li>
+    </ul>
+  </div>
+
+  <h2>七段台词（照着念即可，用自己的话更自然）</h2>
+  <table>
+    <colgroup><col style="width:78px"><col style="width:42%"><col></colgroup>
+    <tr><th>时间</th><th>手上动作</th><th>照着念</th></tr>
+
+    <tr>
+      <td class="t">0:00–0:08</td>
+      <td class="a">打开小程序，停在首页，手指<b>缓慢</b>上滑，把系统介绍划过去</td>
+      <td class="say">「这是未登录时的首页，系统的用途和功能说明都能直接浏览，不需要先登录。」</td>
+    </tr>
+    <tr>
+      <td class="t">0:08–0:13</td>
+      <td class="a">点《用户服务协议》→ 停 2 秒 → 返回</td>
+      <td class="say">「这里是用户服务协议。」</td>
+    </tr>
+    <tr>
+      <td class="t">0:13–0:18</td>
+      <td class="a">点《隐私政策》→ 停 2 秒 → 返回</td>
+      <td class="say">「隐私政策里写清楚了收集哪些信息、用来做什么。」</td>
+    </tr>
+
+    <tr class="key">
+      <td class="t">0:18–0:30</td>
+      <td class="a">点「登录」→ <b>故意不勾协议，直接点登录</b> → 等它弹提示<br>
+          <span style="color:#888">这一步千万别跳过</span></td>
+      <td class="say">「登录前必须先主动勾选同意协议。我不勾选直接点登录，系统会拦下来 —— 没有默认勾选，也不存在强制授权。」</td>
+    </tr>
+    <tr>
+      <td class="t">0:30–0:38</td>
+      <td class="a">勾上「我已阅读并同意」→ 点「微信一键登录」→ 进首页</td>
+      <td class="say">「勾选同意后再登录，进入首页。」</td>
+    </tr>
+
+    <tr class="key">
+      <td class="t">0:38–0:48</td>
+      <td class="a">手指<b>缓慢划过</b>卡片区，让每张卡露一下脸（不用点进去）</td>
+      <td class="say">「登录后，首页只显示我这个岗位有权限使用的功能：领料出库、入库登记、仓管工作台、库存盘点、库存流水和老板看板。下面演示一次完整的领料出库流程。」</td>
+    </tr>
+
+    <tr>
+      <td class="t">0:48–1:02</td>
+      <td class="a">点「领料出库」→ 搜索框打「<b>夹板</b>」→ 加入领料清单 → 数量填 <b>5</b></td>
+      <td class="say">「搜索物料，加入领料清单，填写要领的数量。」</td>
+    </tr>
+    <tr>
+      <td class="t">1:02–1:10</td>
+      <td class="a">选出库类型 → 点「提交出库（N 项）」→ 等成功提示</td>
+      <td class="say">「选择出库类型，提交。」<br>（成功后）「提交成功，单据已经流转到仓管那边。」</td>
+    </tr>
+
+    <tr>
+      <td class="t">1:10–1:18</td>
+      <td class="a">返回首页 → 点「仓管工作台」→ 停一下，让四个数字露脸</td>
+      <td class="say">「回到首页进入仓管工作台，这里能看到待确认、待拣货、待收货的数量。」</td>
+    </tr>
+    <tr>
+      <td class="t">1:18–1:26</td>
+      <td class="a">进「待办单据」→ 在<b>待确认</b>里找到刚提交那张 → 点「确认」</td>
+      <td class="say">「刚才那张单已经进来了，确认它，单据进入待拣货。」</td>
+    </tr>
+    <tr>
+      <td class="t">1:26–1:34</td>
+      <td class="a">切到<b>待拣货</b> → 找到这张单 → 点「拣货完成」</td>
+      <td class="say">「拣完货标记完成，系统会通知领料员来收货。」</td>
+    </tr>
+
+    <tr class="key">
+      <td class="t">1:34–1:44</td>
+      <td class="a">返回首页 → 点顶部「你有 N 张领料单待收货」提醒卡 → 进详情 → 点「确认收货（扣减库存）」</td>
+      <td class="say">「领料员到场核对实物后点确认收货 —— <b>库存是在这一步才真正扣减的</b>。」</td>
+    </tr>
+    <tr>
+      <td class="t">1:44–1:50</td>
+      <td class="a">看单据的<b>流转记录</b>（已提交 → 仓管确认 → 拣货完成 → 确认收货）</td>
+      <td class="say">「每一步谁操作的、什么时间，都有记录，可以追溯。」</td>
+    </tr>
+    <tr>
+      <td class="t">1:50–2:00</td>
+      <td class="a">返回首页 → 点「老板看板」→ 停 3 秒 → <b>停住，结束录制</b></td>
+      <td class="say">「管理层在这里能看到整体库存和出入库流水，用来对账。演示到这里，谢谢。」</td>
+    </tr>
+  </table>
+
+  <h2>这三处必须说清（审核最爱挑的点）</h2>
+  <table class="must">
+    <tr><th style="width:88px">位置</th><th style="width:40%">必须说到</th><th>为什么</th></tr>
+    <tr><td class="t">0:18</td><td>必须主动勾选协议，<b>没有默认勾选</b></td><td>破掉「强制授权 / 默认同意」</td></tr>
+    <tr><td class="t">0:38</td><td>首页只显示<b>本岗位有权限</b>的功能</td><td>破掉「功能不完整 / 空壳」</td></tr>
+    <tr><td class="t">1:34</td><td><b>确认收货后</b>库存才扣减</td><td>证明业务逻辑真实，不是摆拍</td></tr>
+  </table>
+
+  <h2>录的时候记住三件事</h2>
+  <ul>
+    <li>手指<b>慢一点</b>，每步做完<b>停 1 秒</b>再点下一处 —— 审核员要看清楚</li>
+    <li>页面出现「加载中」多停 1 秒，别切太快让人以为是空页</li>
+    <li><b>中途报错就停下重录</b>，带错误的视频不如没有</li>
+  </ul>
+
+  <h2>录完立刻检查</h2>
+  <ul>
+    <li>相册回放，<b>听有没有声音</b>（这次就栽在这）</li>
+    <li>没有声音 → 回到本文最上面的「开录前 30 秒」，<b>长按</b>「◎」点亮麦克风，再录一遍</li>
+    <li>有声音 → 看时长，超 2 分钟可以只留到「提交出库成功」那段</li>
+  </ul>
+
+  <p class="foot">
+    素材：<code>docs/提审录屏脚本.md</code>（逐字稿全文）、<code>docs/提审录屏分镜.md</code>（iPhone 录屏怎么开、压缩、投递）<br>
+    库存核实：2026-10-17 12:47 · 夹板 / 钢板膜 / KA炉盘 各 100，帆布手套 10，水鞋仅 5（别用水鞋演示）
+  </p>
+
+</div>
+</body>
+</html>
