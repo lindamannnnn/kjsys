@@ -405,6 +405,8 @@ async function orderFlow(ctx, data = {}) {
               FROM outbound_order_items oi
               LEFT JOIN materials m ON m.id = oi.material_id
              WHERE oi.order_id = o.id) AS total_amount,
+           -- 出库没有「待补价」概念（金额按库存成本折算），占位 0 保持 UNION 列数一致
+           0 AS pending_count,
            (SELECT GROUP_CONCAT(material_name SEPARATOR '、') FROM outbound_order_items WHERE order_id = o.id) AS material_names,
            w.name AS warehouse_name, w.code AS warehouse_code
       FROM outbound_orders o LEFT JOIN warehouses w ON w.id = o.warehouse_id
@@ -414,6 +416,8 @@ async function orderFlow(ctx, data = {}) {
            o.created_at, o.remark,
            (SELECT COALESCE(SUM(quantity), 0) FROM inbound_order_items WHERE order_id = o.id) AS total_qty,
            o.total_price AS total_amount,
+           -- 待补价项数（2026-10-20）：成品仓上线初期没有价格，总价 0 不代表「不要钱」
+           o.pending_count,
            (SELECT GROUP_CONCAT(material_name SEPARATOR '、') FROM inbound_order_items WHERE order_id = o.id) AS material_names,
            w.name AS warehouse_name, w.code AS warehouse_code
       FROM inbound_orders o LEFT JOIN warehouses w ON w.id = o.warehouse_id

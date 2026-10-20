@@ -69,7 +69,11 @@
         <view class="order-footer">
           <text class="operator">{{ item.operator_name }}</text>
           <view class="footer-actions">
-            <text v-if="item.kind === 'inbound'" class="amount">¥{{ formatMoney(item.total_amount) }}</text>
+            <!-- 待补价（2026-10-20）：成品仓上线初期没价格，这批货金额是 0 不代表不要钱 -->
+            <view v-if="item.kind === 'inbound'" class="amount-box">
+              <text class="amount">¥{{ formatMoney(item.total_amount) }}</text>
+              <text v-if="Number(item.pending_count) > 0" class="pending-tag">待补价</text>
+            </view>
             <!-- 老板驳回/撤销按钮（待确认状态显示；厂长只读，不显示） -->
             <text
               v-if="item.status === 'pending' && canReject"
@@ -448,6 +452,22 @@ onMounted(() => {
         font-size: 26rpx;
         font-weight: bold;
         color: #0B4F95;
+      }
+
+      /* 待补价：琥珀色标签，避免把「还没定价」看成「0 元」 */
+      .amount-box {
+        display: flex;
+        align-items: center;
+        gap: 8rpx;
+
+        .pending-tag {
+          font-size: 20rpx;
+          color: #B26A00;
+          background: #FFF7E6;
+          border: 1rpx solid #FFE0A3;
+          border-radius: 6rpx;
+          padding: 2rpx 8rpx;
+        }
       }
 
       .btn-reject {

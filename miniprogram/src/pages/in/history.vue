@@ -31,7 +31,12 @@
           <view class="header-right">
             <text class="order-status" :class="item.status">{{ statusText(item.status) }}</text>
             <!-- 金额：后端 inbound.list 只对「成品仓」单据向仓管脱敏，配件仓保留 -->
-            <text v-if="item.total_price != null" class="order-amount">¥{{ formatMoney(item.total_price) }}</text>
+            <!-- 待补价（2026-10-20）：金额里还有没定价的项时标出来，
+                 否则看到 ¥0.00 会以为这批货真的不要钱 -->
+            <view v-if="item.total_price != null" class="amount-box">
+              <text class="order-amount">¥{{ formatMoney(item.total_price) }}</text>
+              <text v-if="Number(item.pending_count) > 0" class="pending-tag">待补价</text>
+            </view>
           </view>
         </view>
         <view class="order-body">
@@ -110,11 +115,19 @@ function priceSummary(item) {
   // 金额被脱敏（成品仓单据对仓管不下发 unit_price）→ 整行不显示。
   // ⚠️ 不能退回「单价未填」：那是「采购员没填」的意思，会把脱敏误报成数据缺失。
   if (!list.some((i) => i.unit_price !== undefined)) return ''
+  // 三态要分清（2026-10-20 待补价上线后）：
+  //   ① 脱敏（unit_price 为 undefined，字段不下发）→ 上面已 return ''，不在这里
+  //   ② 待补价（price_pending=1 / unit_price 为 null）→ 这批还没定价，不是漏填
+  //   ③ 有价（数字）→ 正常显示
+  const isPending = (i) =>
+    i.price_pending === 1 || i.price_pending === true || i.unit_price === null
   if (list.length === 1) {
     const i = list[0]
-    if (i.unit_price === null || i.unit_price === undefined) return '单价未填'
+    if (isPending(i)) return '单价待补价（这批货还没定价）'
     return `单价 ¥${Number(i.unit_price).toFixed(2)} × ${i.quantity} = ¥${Number(i.total_price || 0).toFixed(2)}`
   }
+  const pendN = list.filter(isPending).length
+  if (pendN > 0) return `${list.length} 项物料（其中 ${pendN} 项待补价），点开看每项单价`
   return `${list.length} 项物料，点开看每项单价`
 }
 
@@ -266,6 +279,23 @@ onMounted(() => {
       font-size: 28rpx;
       font-weight: bold;
       color: #0B4F95;
+    }
+
+    /* 待补价：琥珀色标签，和真金额（蓝色）分开，避免被当成 0 元 */
+    .amount-box {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+
+      .pending-tag {
+        margin-top: 4rpx;
+        font-size: 20rpx;
+        color: #B26A00;
+        background: #FFF7E6;
+        border: 1rpx solid #FFE0A3;
+        border-radius: 6rpx;
+        padding: 2rpx 8rpx;
+      }
     }
   }
 

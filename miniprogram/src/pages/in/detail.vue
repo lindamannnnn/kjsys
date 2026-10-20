@@ -5,7 +5,12 @@
       <view class="card-header">
         <text class="order-no">{{ order.order_no }}</text>
         <!-- 金额：后端 inbound.detail 只对「成品仓」单据向仓管脱敏，配件仓保留 -->
-        <text v-if="order.total_price != null" class="order-amount">¥{{ order.total_price }}</text>
+        <!-- 待补价（2026-10-20）：整单或部分明细还没定价时，金额不是"真 0"，
+             必须标出来，否则看到 ¥0.00 会误以为这批货不要钱 -->
+        <view v-if="order.total_price != null" class="amount-wrap">
+          <text class="order-amount">¥{{ order.total_price }}</text>
+          <text v-if="Number(order.pending_count) > 0" class="pending-badge">含 {{ order.pending_count }} 项待补价</text>
+        </view>
       </view>
       <view class="card-body">
         <view class="info-row">
@@ -44,7 +49,9 @@
         >
           <text class="label">{{ it.material_name }}{{ it.material_spec ? ' / ' + it.material_spec : '' }}</text>
           <!-- 单价 / 小计：成品仓单据对仓管不下发（配件仓正常显示） -->
-          <text v-if="it.unit_price != null || it.total_price != null" class="value highlight">{{ it.quantity }} {{ it.unit }} × ¥{{ formatMoney(it.unit_price) }} = ¥{{ formatMoney(it.total_price) }}</text>
+          <!-- 待补价：单价还没定，不能显示成 ¥0.00（0 是"确实不要钱"，是另一回事） -->
+          <text v-if="isPricePending(it)" class="value pending">{{ it.quantity }} {{ it.unit }} · 待补价</text>
+          <text v-else-if="it.unit_price != null || it.total_price != null" class="value highlight">{{ it.quantity }} {{ it.unit }} × ¥{{ formatMoney(it.unit_price) }} = ¥{{ formatMoney(it.total_price) }}</text>
           <text v-else class="value">{{ it.quantity }} {{ it.unit }}</text>
         </view>
         <view v-if="!(order.items || []).length" class="info-row">
@@ -162,6 +169,18 @@ const priceItems = ref([])
 const priceTip = ref('')
 
 function noop() {}
+
+/**
+ * 是否「待补价」（成品仓上线初期拿不到价格，单价留空）
+ * ⚠️ 必须用 price_pending 判断，**不能用 unit_price == null**：
+ *    金额对成品仓纯仓管是脱敏的（字段压根不下发，取到 undefined），
+ *    拿 null/空判断会把「看不到金额」误认成「还没定价」，两回事。
+ */
+function isPricePending(it) {
+  if (!it) return false
+  const p = it.price_pending
+  return p === 1 || p === true || p === '1'
+}
 
 async function loadDetail() {
   if (!orderId.value) return
@@ -309,6 +328,23 @@ onLoad((options) => {
     }
   }
 
+  /* 待补价：琥珀色，和"真金额"（蓝色）视觉区分开，避免被当成 0 元 */
+  .amount-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+
+    .pending-badge {
+      margin-top: 6rpx;
+      font-size: 20rpx;
+      color: #B26A00;
+      background: #FFF7E6;
+      border: 1rpx solid #FFE0A3;
+      border-radius: 6rpx;
+      padding: 2rpx 10rpx;
+    }
+  }
+
   .card-body {
     .info-row {
       display: flex;
@@ -327,6 +363,14 @@ onLoad((options) => {
         &.highlight {
           color: #0B4F95;
           font-weight: bold;
+        }
+
+        /* 待补价：琥珀色，明确「这笔钱还没定」而不是 0 元 */
+        &.pending {
+          color: #B26A00;
+          background: #FFF7E6;
+          border-radius: 6rpx;
+          padding: 2rpx 10rpx;
         }
       }
     }

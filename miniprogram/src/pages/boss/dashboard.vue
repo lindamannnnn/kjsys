@@ -76,6 +76,10 @@
       <text class="wh-value-tip">
         按「库存数量 × 加权平均成本」计算，反映仓库存货占用的资金
       </text>
+      <!-- 待补价（2026-10-20）：没定价的货成本按 0 算，总值会偏低，必须说明 -->
+      <text v-if="Number(kpiData.price_pending_items) > 0" class="wh-value-tip pending-tip">
+        其中 {{ kpiData.price_pending_items }} 项入库还没定价（待补价），未计入上面的金额，补齐价格后总值会更高
+      </text>
     </view>
 
     <!-- 库存预警提示（没有预警页权限的角色不显示，避免点了 403） -->
@@ -213,7 +217,10 @@ async function loadData() {
       period_outbound_orders: res.period_outbound_orders || 0,
       period_inbound_orders: res.period_inbound_orders || 0,
       total_stock: res.total_stock || 0,
-      warning_count: res.warning_count || 0
+      warning_count: res.warning_count || 0,
+      // 待补价项数（2026-10-20）：成品仓上线初期拿不到价格，
+      //   这部分货的成本是 0 → 仓库总值会偏低，必须说清楚，否则老板会以为钱少了
+      price_pending_items: res.price_pending_items || 0
     }
     await loadWarehouseSummary()
   } catch (err) {
@@ -411,6 +418,15 @@ onMounted(() => {
     font-size: 22rpx;
     color: #bbb;
     line-height: 1.6;
+
+    /* 待补价提示：琥珀色，和"说明文字"区分开，醒目但不报警 */
+    &.pending-tip {
+      margin-top: 8rpx;
+      color: #B26A00;
+      background: #FFF7E6;
+      border-radius: 8rpx;
+      padding: 8rpx 12rpx;
+    }
   }
 }
 
