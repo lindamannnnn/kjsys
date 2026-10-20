@@ -247,7 +247,7 @@ async function submit(ctx, data = {}) {
         //    所以提交这一步只做「够不够」的预检，避免提交完才发现发不出货。
         //    例外：领料员不查库存（他们也看不到库存数）——缺不缺货由仓管确认时把关、不够就退单。
         if (!isPureOut) {
-          assertStockEnough(matMap, items, '提交领料单时校验失败，')
+          assertStockEnough(matMap, items, '提交出库单时校验失败，')
         }
         for (const it of items) {
           const material = matMap.get(it.material_id)
@@ -289,7 +289,7 @@ async function submit(ctx, data = {}) {
         // 8. 通知仓管员来确认（消息与单据同事务，不会出现「单在、消息没了」）
         await notifyStorekeepers(conn, wid, {
           type: MSG_TYPE.OUTBOUND_SUBMITTED,
-          title: '有新的领料单待确认',
+          title: '有新的出库单待确认',
           content: `${operator.name} 提交了 ${orderNo}，共 ${items.length} 项，请及时确认并拣货`,
           refType: 'outbound', refId: orderId, refNo: orderNo
         })
@@ -323,7 +323,7 @@ async function submit(ctx, data = {}) {
     )
   }
 
-  return ok({ _id: result.orderId, order_no: result.orderNo }, '领料单已提交，等待仓管确认拣货')
+  return ok({ _id: result.orderId, order_no: result.orderNo }, '出库单已提交，等待仓管确认拣货')
 }
 
 /** 出库单列表 */
@@ -713,13 +713,13 @@ async function pickDone(ctx, data = {}) {
         openid: operator.openid, userName: operator.name,
         role: (ctx.user.roles || []).join(','),
         action: 'outbound_pick_done', targetType: 'order', targetId: id,
-        detail: `领料单 ${order.order_no} 拣货完成，等待领料员收货`, ip: ctx.ip
+        detail: `出库单 ${order.order_no} 拣货完成，等待发起人收货`, ip: ctx.ip
       })
 
       // 通知领料员来收货（与状态变更同事务）
       await notifyOperator(conn, order.operator_openid, {
         type: MSG_TYPE.OUTBOUND_PICKED,
-        title: '你的领料单已拣货完成，请来收货',
+        title: '你的出库单已拣货完成，请来收货',
         content: `${order.order_no} 已完成拣货（共 ${items.length} 项），请到场核对实物后点「确认收货」`,
         refType: 'outbound', refId: id, refNo: order.order_no
       })
@@ -735,7 +735,7 @@ async function pickDone(ctx, data = {}) {
     throw err
   }
 
-  return ok({ status: 'receiving' }, '拣货完成，已通知领料员来收货')
+  return ok({ status: 'receiving' }, '拣货完成，已通知发起人来收货')
 }
 
 /**
@@ -754,7 +754,7 @@ async function receive(ctx, data = {}) {
   const isOwner = order.operator_openid === identityOf(ctx.user)
   const isManager = hasAnyRole(ctx.user, ['storekeeper', 'boss', 'admin'])
   if (!isOwner && !isManager) {
-    return fail(403, '只有该单的领料人或仓管可以确认收货')
+    return fail(403, '只有该单的发起人或仓管可以确认收货')
   }
   ctx.requireWarehouseAccess(order.warehouse_id, '该单据')
 
@@ -816,7 +816,7 @@ async function receive(ctx, data = {}) {
       // 回执给仓管：这单彻底办完了
       await notifyStorekeepers(conn, order.warehouse_id, {
         type: MSG_TYPE.OUTBOUND_RECEIVED,
-        title: '领料单已完成收货',
+        title: '出库单已完成收货',
         content: `${order.order_no} 已由${operator.name}确认收货，库存已扣减`,
         refType: 'outbound', refId: id, refNo: order.order_no
       })
@@ -906,7 +906,7 @@ async function reject(ctx, data = {}) {
       // 通知提交人：被驳回后能立刻知道，并看到原因
       await notifyOperator(conn, order.operator_openid, {
         type: MSG_TYPE.OUTBOUND_REJECTED,
-        title: '你的领料单被驳回',
+        title: '你的出库单被驳回',
         content: `${order.order_no} 被驳回：${reason}`,
         refType: 'outbound', refId: id, refNo: order.order_no
       })

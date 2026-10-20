@@ -56,7 +56,7 @@
               @click.stop="confirmOrder(item)"
             >确认</text>
 
-            <!-- 待拣货：拣完货通知领料员来收 -->
+            <!-- 待拣货：拣完货通知发起人来收（领料单=领料员，成品仓出库=厂长/成品仓管） -->
             <text
               v-if="item.order_type === 'out' && item.status === 'picking'"
               class="btn-pick"
@@ -215,14 +215,17 @@ function previewPhoto() {
   }
 }
 
-/** 明细弹窗底部说明：按单据类型说对应的话（报废单不讲「领料员收货」那套） */
+/** 明细弹窗底部说明：按单据类型说对应的话（报废单不讲「收货」那套） */
 const detailTip = computed(() => {
   const o = detailOrder.value
   if (o.order_type === 'out' && o.type === 'baofei') {
     return '报废单：确认后立刻出库，库存当场扣减，单据办结。照片和报废原因是凭证，请核对后再确认。'
   }
   if (o.order_type === 'out') {
-    return '出库单：确认后进入「待拣货」，拣完货系统会通知领料员来收；库存在领料员确认收货时才扣减。'
+    // ⚠️ 别写死「领料员」：成品仓出库（销售）由厂长或成品仓管发起，流程里根本没有领料员。
+    //    后端 notifyOperator(order.operator_openid) 通知的永远是「发起人」——
+    //    领料单的发起人是领料员，成品仓出库的发起人是厂长/成品仓管。用「发起人」对所有类型都成立。
+    return '出库单：确认后进入「待拣货」，拣完货系统会通知发起人来收；库存要等发起人确认收货时才扣减。'
   }
   return '入库单：确认只是让单据生效（入库时已加库存）。'
 })
@@ -375,7 +378,7 @@ function confirmOrder(item) {
     content: isScrap
       ? `确认 ${item.order_no} 报废吗？\n确认后立刻出库：库存当场扣减，单据办结。照片和原因请先看明细核对。`
       : isOut
-        ? `确认 ${item.order_no} 吗？\n确认后进入「待拣货」，请按清单备货；拣完点「拣货完成」通知领料员来收。\n库存在领料员确认收货时才扣减。`
+        ? `确认 ${item.order_no} 吗？\n确认后进入「待拣货」，请按清单备货；拣完点「拣货完成」通知发起人来收。\n库存要等发起人确认收货时才扣减。`
         : `确认 ${item.order_no} 吗？\n入库单在提交时已经加了库存，确认只是让单据生效。`,
     confirmText: '确认',
     cancelText: '再想想',
@@ -394,18 +397,18 @@ function confirmOrder(item) {
   })
 }
 
-/** 拣货完成：进入待收货并通知领料员 */
+/** 拣货完成：进入待收货并通知发起人（领料单是领料员，成品仓出库是厂长/成品仓管） */
 function pickDone(item) {
   uni.showModal({
     title: '拣货完成',
-    content: `确认 ${item.order_no} 已备好货？\n确认后系统会发消息通知领料员来收货。`,
+    content: `确认 ${item.order_no} 已备好货？\n确认后系统会发消息通知发起人来收货。`,
     confirmText: '已备好',   // wx.showModal 硬限制：按钮文案不能超过 4 个汉字，超了弹窗直接不弹
     cancelText: '还没好',
     success: async (res) => {
       if (!res.confirm) return
       try {
         await outboundApi.pickDone({ id: item._id })
-        uni.showToast({ title: '已通知领料员来收货', icon: 'success' })
+        uni.showToast({ title: '已通知发起人来收货', icon: 'success' })
         loadData()
       } catch (err) {
         uni.showToast({ title: err.message || '操作失败', icon: 'none', duration: 3000 })

@@ -3,7 +3,7 @@
     <!-- 成品仓出库模式提示（厂长）：仓库已锁定，不给切 -->
     <view v-if="isFinishedOut" class="mode-banner">
       <text class="mode-title">🚚 成品仓出库</text>
-      <text class="mode-desc">提交后由成品仓管拣货，拣完会通知你确认收货</text>
+      <text class="mode-desc">提交后由成品仓管拣货确认，完成后通知发起人收货</text>
     </view>
 
     <!-- 搜索栏 -->
