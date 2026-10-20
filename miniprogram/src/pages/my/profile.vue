@@ -93,8 +93,10 @@
       </view>
     </view>
 
-    <!-- 最近操作记录 -->
-    <view class="section">
+    <!-- 最近操作记录（只给老板 / 管理员）
+         2026-10-20 用户要求：普通员工的「我的」页面只留账号相关的东西，业务入口走首页。
+         操作记录对一线员工意义不大（他们要查的是单据，不是自己的操作日志），一并收起。 -->
+    <view v-if="isManager" class="section">
       <view class="section-title">最近操作记录</view>
       <view v-if="logs.length === 0" class="logs-empty">
         <text>暂无记录</text>
@@ -190,34 +192,48 @@ const roleText = computed(() => {
 })
 
 /**
- * 功能菜单（按角色出）
+ * 功能菜单（只对老板 / 管理员出）
  * roles 必须与后端的 roleRules 对齐 —— 给了入口却点进去 403，比不给还糟。
  *   out/history  → outbound.list（无 roleRules，登录即可读）
  *   in/history   → inbound.list
  *   ledger       → stats.stockFlow（boss/admin/storekeeper/purchase/director）
  *   check/list   → check.list（可见性：storekeeper/director/admin 看全仓，创建人看自己）
  *   warning      → stats.warning（boss/admin/storekeeper/purchase/director）
+ * ⚠️ 2026-10-20 起非管理角色不再看到这份菜单（menuItems 直接返回空），
+ *    roles 字段保留是为了限制「管理角色能看到哪几条」，不是给员工开入口用的。
  */
 const MENU = [
-  { key: 'out', icon: '📋', label: '出库记录', myLabel: '我的出库记录', url: '/pages/out/history', roles: ['out', 'storekeeper', 'purchase', 'boss', 'director', 'admin'] },
-  { key: 'in', icon: '📥', label: '入库记录', myLabel: '我的入库记录', url: '/pages/in/history', roles: ['storekeeper', 'purchase', 'boss', 'director', 'admin'] },
+  { key: 'out', icon: '📋', label: '出库记录', url: '/pages/out/history', roles: ['out', 'storekeeper', 'purchase', 'boss', 'director', 'admin'] },
+  { key: 'in', icon: '📥', label: '入库记录', url: '/pages/in/history', roles: ['storekeeper', 'purchase', 'boss', 'director', 'admin'] },
   { key: 'ledger', icon: '📒', label: '库存流水', url: '/pages/purchase/ledger', roles: ['storekeeper', 'purchase', 'boss', 'director', 'admin'] },
   { key: 'warning', icon: '⚠️', label: '库存预警', url: '/pages/boss/warning', roles: ['storekeeper', 'purchase', 'boss', 'director', 'admin'] },
   { key: 'check', icon: '📊', label: '盘点任务', url: '/pages/check/list', roles: ['storekeeper', 'director', 'admin'] }
 ]
 
-const menuItems = computed(() => {
+/**
+ * 管理角色：老板 / 管理员。
+ * 2026-10-20 用户口径：「我的」页面是个人中心，不是工作台 ——
+ * 非管理角色（领料员 / 采购员 / 仓管员 / 厂长）只看得到账号相关的东西
+ * （资料设置、修改密码、关于系统），业务菜单与操作记录一律不显示。
+ * 删之前逐个核过入口没断：
+ *   出库记录 → 领料出库提交成功后弹窗「查看记录」直跳
+ *   入库记录 → 仓管工作台「全部流水」（含入库 tab）
+ *   库存预警 → 仓管工作台「本仓库存」（低于安全库存处有红色「预警」标签）
+ *   库存流水 → 首页卡片
+ *   盘点任务 → 首页卡片
+ * 以后要再加回某个入口，先确认它在别的页面有没有落点。
+ */
+const isManager = computed(() => {
   const mine = roles.value || []
-  // 纯领料员看到的是「我的」记录（数据范围本就只有自己），其它角色看到的是公共列表
-  const pureOut = mine.length === 1 && mine[0] === 'out'
+  return mine.includes('boss') || mine.includes('admin')
+})
+
+const menuItems = computed(() => {
+  if (!isManager.value) return []
+  const mine = roles.value || []
   return MENU
     .filter(m => m.roles.some(r => mine.includes(r)))
-    .map(m => ({
-      key: m.key,
-      icon: m.icon,
-      url: m.url,
-      label: pureOut && m.myLabel ? m.myLabel : m.label
-    }))
+    .map(m => ({ key: m.key, icon: m.icon, url: m.url, label: m.label }))
 })
 
 function actionText(action) {
