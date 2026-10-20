@@ -68,3 +68,6 @@ server/scripts/out/
 !server/data/
 server/data/*
 !server/data/parts-code.json
+
+# ---------- 含生产账号密码的交付文档，不入库 ----------
+docs/角色页面账号对照表-*.html
