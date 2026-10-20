@@ -3,7 +3,12 @@
     <!-- 个人信息卡片 -->
     <view class="profile-card">
       <view class="avatar-section">
-        <image class="avatar" :src="userInfo?.avatar || '/static/default-avatar.png'" mode="aspectFill" />
+        <!-- 有微信头像就显示，没有就用姓名首字占位。
+             ⚠️ 不要再写 '/static/default-avatar.png'：src/static 里从来没有这个文件，
+                会报「[渲染层网络层错误] Failed to load image ... ERR_FILE_NOT_FOUND」，
+                而且包体白白多一次失败请求。首字占位零资源依赖，永远不会 404。 -->
+        <image v-if="userInfo?.avatar" class="avatar" :src="userInfo.avatar" mode="aspectFill" />
+        <view v-else class="avatar avatar-letter">{{ avatarLetter }}</view>
         <view class="user-info">
           <text class="nickname">{{ userInfo?.real_name || userInfo?.nickname || '未设置' }}</text>
           <text class="role">{{ roleText }}</text>
@@ -130,6 +135,15 @@ import { DEV_MODE, DEV_IDENTITIES, getDevOpenid, setDevOpenid } from '@/utils/cl
 const userStore = useUserStore()
 
 const userInfo = computed(() => userStore.userInfo)
+/**
+ * 无头像时的占位字：取姓名的第一个字。
+ * 中文取首字（「文彬」→「文」），英文取首字母大写；都没有就退一个中性符号。
+ */
+const avatarLetter = computed(() => {
+  const name = String(userInfo.value?.real_name || userInfo.value?.nickname || '').trim()
+  if (!name) return '👤'
+  return name.slice(0, 1).toUpperCase()
+})
 const roles = computed(() => userStore.roles)
 const isPending = computed(() => userStore.isPending)
 
@@ -359,6 +373,17 @@ onMounted(() => {
       height: 120rpx;
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* 无头像占位：尺寸/圆角/背景沿用上面的 .avatar，这里只负责把字摆中间 */
+    .avatar-letter {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 52rpx;
+      font-weight: bold;
+      color: #ffffff;
+      line-height: 1;
     }
 
     .user-info {
