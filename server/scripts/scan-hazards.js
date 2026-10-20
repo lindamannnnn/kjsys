@@ -424,13 +424,65 @@ const CHECKS = [
     id: 'IN-TOTAL-MISMATCH',
     level: 'YELLOW',
     title: '入库明细 小计 ≠ 数量 × 单价',
-    why: '金额算错会影响成本和利润。容差 0.01（四舍五入）以内算正常',
+    why: '金额算错会影响成本和利润。容差 0.01（四舍五入）以内算正常。'
+      + '⚠️ 待补价明细（unit_price 为 NULL）不参与此判据 —— 它的 total_price 就该是 0，'
+      + '显式排除而不是靠 NULL 传播绕过去，否则判据本身说不清自己的口径',
     count: `SELECT COUNT(*) AS n FROM inbound_order_items
-             WHERE quantity > 0 AND ABS(total_price - quantity * unit_price) > 0.01`,
+             WHERE quantity > 0
+               AND price_pending = 0
+               AND unit_price IS NOT NULL
+               AND ABS(total_price - quantity * unit_price) > 0.01`,
     sample: `SELECT id, order_id, material_name, quantity, unit_price, total_price,
                    ROUND(quantity * unit_price, 2) AS 应为
               FROM inbound_order_items
-             WHERE quantity > 0 AND ABS(total_price - quantity * unit_price) > 0.01`
+             WHERE quantity > 0
+               AND price_pending = 0
+               AND unit_price IS NOT NULL
+               AND ABS(total_price - quantity * unit_price) > 0.01`
+  },
+  {
+    // 2026-10-20 新增（配合「待补价」上线）
+    // 为什么要有：「待补价」把「单价未定」和「单价为 0」分成了两种状态，
+    //   一旦标记和金额不自洽（标了待补价却有金额 / 没标待补价却缺单价），
+    //   成本核算会把它当 0 参与加权 → 悄悄稀释成本，事后极难发现。
+    id: 'IN-PENDING-INCONSISTENT',
+    level: 'ORANGE',
+    title: '待补价明细的标记与金额不自洽',
+    why: '「待补价」= 单价还没定，此时 total_price 必须是 0、unit_price 必须是空。'
+      + '反过来，没标待补价的明细必须有单价。不自洽会让成本核算把「未定价」当成 0 参与加权，'
+      + '把已有成本永久稀释且不可逆',
+    count: `SELECT COUNT(*) AS n FROM inbound_order_items
+             WHERE (price_pending = 1 AND (unit_price IS NOT NULL OR total_price <> 0))
+                OR (price_pending = 0 AND unit_price IS NULL)`,
+    sample: `SELECT id, order_id, material_name, quantity, unit_price, price_pending, total_price,
+                   CASE WHEN price_pending = 1 AND unit_price IS NOT NULL THEN '标了待补价却有单价'
+                        WHEN price_pending = 1 AND total_price <> 0     THEN '标了待补价却有金额'
+                        ELSE '没标待补价却缺单价' END AS 问题
+              FROM inbound_order_items
+             WHERE (price_pending = 1 AND (unit_price IS NOT NULL OR total_price <> 0))
+                OR (price_pending = 0 AND unit_price IS NULL)`
+  },
+  {
+    // 2026-10-20 新增：列表页靠 pending_count 打「待补价」标签，数不对会出现
+    //   「单子上写着待补价、点进去没有」或反过来「有待补价却查不到」。
+    id: 'IN-PENDING-COUNT',
+    level: 'YELLOW',
+    title: '入库单 pending_count 与明细实际待补数不符',
+    why: '列表页与看板靠这个冗余字段标「金额未定稿」。数不对 → 该补价的单没人看见，'
+      + '或补完了还一直挂着红标',
+    count: `SELECT COUNT(*) AS n FROM inbound_orders o
+             WHERE o.pending_count <> (
+               SELECT COUNT(*) FROM inbound_order_items i
+                WHERE i.order_id = o.id AND i.price_pending = 1
+             )`,
+    sample: `SELECT o.id, o.order_no, o.status, o.pending_count AS 记的数,
+                   (SELECT COUNT(*) FROM inbound_order_items i
+                     WHERE i.order_id = o.id AND i.price_pending = 1) AS 实际数
+              FROM inbound_orders o
+             WHERE o.pending_count <> (
+               SELECT COUNT(*) FROM inbound_order_items i
+                WHERE i.order_id = o.id AND i.price_pending = 1
+             )`
   },
 
   // ---------------- 明细重复 / 数量值域 ----------------

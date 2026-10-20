@@ -26,6 +26,11 @@ admin/dist/
 # 本地沙箱里 vite 清空 admin/dist 会被批量删除保护拦下，
 # 于是改用独立输出目录构建；它同样是构建产物，不入库
 admin/dist-deploy/
+# 2026-10-20：部署专用干净产物目录
+#   ⚠️ 必须每次构建到**新目录**：用 --emptyOutDir=false 往旧目录追加构建会累积
+#   历史 hash 文件（实测残留 27 个旧 chunk），传上生产就是一堆没人引用的垃圾。
+admin/dist-ship/
+admin/dist-check/
 
 # ---------- 小程序私有配置 ----------
 miniprogram/project.private.config.json
