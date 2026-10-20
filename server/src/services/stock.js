@@ -168,10 +168,17 @@ async function restoreForOutboundCancel(conn, { material, quantity, orderNo, ope
   })
 }
 
-/** 入库增加 + 移动加权平均成本 */
+/** 入库增加 + 移动加权平均成本
+ *
+ * ⚠️ 单价为 null（待补价）时的口径（2026-10-20，成品仓销售端未接入）：
+ *   数量照常入账，但**这批不参与加权**，avg_cost 保持原值。
+ *   绝不能当成 0 参与加权 —— 那会把已有成本按库存数量永久稀释（改不回来），
+ *   正是 validate.js 当初禁止填 0 的原因。补价后由 inbound.updatePrice 修正。
+ */
 async function addForInbound(conn, { material, quantity, unitPrice, orderNo, operator, remark }) {
   const q = qty(quantity)
-  const price = num(unitPrice)
+  const pending = unitPrice === null || unitPrice === undefined || unitPrice === ''
+  const price = pending ? 0 : num(unitPrice)
   if (q <= 0) throw errors.badRequest(`入库数量必须大于 0（${material.name}）`)
 
   const before = num(material.current_stock)
@@ -181,7 +188,11 @@ async function addForInbound(conn, { material, quantity, unitPrice, orderNo, ope
   // 移动加权平均：(原库存金额 + 本次入库金额) / 总数量
   const oldAmount = beforeCost * before
   const newAmount = price * q
-  const avgCost = after > 0 ? Number(((oldAmount + newAmount) / after).toFixed(4)) : 0
+  const avgCost = pending
+    ? beforeCost
+    : after > 0
+      ? Number(((oldAmount + newAmount) / after).toFixed(4))
+      : 0
 
   await execute(
     'UPDATE materials SET current_stock = ?, avg_cost = ? WHERE id = ?',
@@ -201,13 +212,13 @@ async function addForInbound(conn, { material, quantity, unitPrice, orderNo, ope
     orderType: 'inbound',
     operatorOpenid: operator.openid || '',
     operatorName: operator.name || '',
-    remark: remark || `入库单价 ${price}`
+    remark: remark || (pending ? '入库（单价待补，暂未计入成本）' : `入库单价 ${price}`)
   })
 
   material.current_stock = after
   material.avg_cost = avgCost
 
-  return { before, after, avgCost, changed: true }
+  return { before, after, avgCost, pricePending: pending, changed: true }
 }
 
 /**
@@ -234,7 +245,11 @@ async function addForInbound(conn, { material, quantity, unitPrice, orderNo, ope
  */
 async function restoreForInboundCancel(conn, { material, quantity, unitPrice, orderNo, operator, remark }) {
   const q = qty(quantity)
-  const price = num(unitPrice)
+  // 待补价（null/空）：当初入库就没往库存金额里加钱，作废时自然也一分不冲。
+  // ⚠️ 若按 0 走下面的公式（remainValue = 成本×数量 − 0），作废反而会把成本抬高，
+  //    数量变少而金额不变，等于凭空造出价值。
+  const pending = unitPrice === null || unitPrice === undefined || unitPrice === ''
+  const price = pending ? 0 : num(unitPrice)
 
   const before = num(material.current_stock)
   if (q <= 0) {
@@ -256,7 +271,10 @@ async function restoreForInboundCancel(conn, { material, quantity, unitPrice, or
 
   let afterCost = 0
   let costFloored = false
-  if (after > 0) {
+  if (pending) {
+    // 本批从未计入金额 → 成本原样保留
+    afterCost = beforeCost
+  } else if (after > 0) {
     // 极端情况（这批入库后已被领用掉一部分）：冲回后金额可能为负，
     // 说明历史出库没有结转成本、库存金额本就虚高。此处夹到 0 不产生负资产，
     // 并在流水与操作日志里明确标注，方便事后核对。
@@ -283,7 +301,11 @@ async function restoreForInboundCancel(conn, { material, quantity, unitPrice, or
     operatorOpenid: operator.openid || '',
     operatorName: operator.name || '',
     remark: (remark || '入库撤销') +
-      (price > 0 ? `；冲回本批入库金额 ${money(price * q)}，成本价 ${beforeCost} → ${afterCost}` : '')
+      (pending
+        ? '；本批单价待补，未冲回金额'
+        : price > 0
+          ? `；冲回本批入库金额 ${money(price * q)}，成本价 ${beforeCost} → ${afterCost}`
+          : '')
   })
 
   // 同步内存值：同一事务内若再次操作该物料，读到的是最新值

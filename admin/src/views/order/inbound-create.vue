@@ -101,7 +101,12 @@
       <!-- 清单 -->
       <el-card class="inner-card" shadow="never">
         <template #header>
-          <div class="card-header"><span>入库清单（{{ cart.length }} 项）</span></div>
+          <div class="card-header">
+            <span>入库清单（{{ cart.length }} 项）</span>
+            <span v-if="allowPendingPrice" class="pending-hint">
+              成品仓可以先不填单价 —— 数量照常入账，这笔会记「待补价」，之后在入库单里补金额
+            </span>
+          </div>
         </template>
         <el-table :data="cart" size="small" v-if="cart.length">
           <el-table-column prop="name" label="物料" min-width="160" show-overflow-tooltip />
@@ -111,13 +116,23 @@
               <el-input-number v-model="row.quantity" :min="1" :precision="0" size="small" style="width: 120px" />
             </template>
           </el-table-column>
-          <el-table-column label="单价（¥）" width="150">
+          <el-table-column :label="allowPendingPrice ? '单价（¥，可留空）' : '单价（¥）'" width="170">
             <template #default="{ row }">
-              <el-input-number v-model="row.unit_price" :min="0" :precision="2" size="small" style="width: 120px" />
+              <!-- 成品仓用普通输入框：el-input-number 清空后会回填成 0，
+                   而 0 在这里是危险的（会把加权成本永久稀释），必须能真正留空 -->
+              <el-input
+                v-model="row.unit_price"
+                :placeholder="allowPendingPrice ? '可留空' : '必填'"
+                size="small"
+                style="width: 130px"
+              />
             </template>
           </el-table-column>
           <el-table-column label="小计" width="110">
-            <template #default="{ row }">¥{{ (row.quantity * row.unit_price).toFixed(2) }}</template>
+            <template #default="{ row }">
+              <span v-if="isPricePending(row)" class="pending-tag">待补价</span>
+              <span v-else>¥{{ (row.quantity * row.unit_price).toFixed(2) }}</span>
+            </template>
           </el-table-column>
           <el-table-column label="操作" width="80" fixed="right">
             <template #default="{ $index }">
@@ -241,6 +256,14 @@ const currentWarehouseCode = computed(() => {
 })
 
 /**
+ * 成品仓允许入库单价留空（记为「待补价」）
+ * 2026-10-20：销售端还没接入，客户那边暂时给不出价格。
+ * 配件仓不放开的理由：买来要跟采购价/发票对账，缺价事后核不出来。
+ * 口径取「不是成品仓就必须填价」，将来多一个仓默认从严，不会误放开。
+ */
+const allowPendingPrice = computed(() => currentWarehouseCode.value === 'chengpin')
+
+/**
  * 细分类的显示名（与物料列表页 / 编辑页同一个口径）：
  *   成品仓 → 车间；配件仓 → 编号分类
  * ⚠️ 不要用大类来筛（2026-10-12 用户反馈）：成品仓的 category 恒为「成品」、
@@ -324,16 +347,28 @@ function addToCart(row) {
     spec: row.spec || '',
     unit: row.unit || '个',
     quantity: 1,
-    unit_price: 0
+    // 默认留空而不是 0：成品仓本来就没有价格，填 0 反而会被当成零成本
+    unit_price: ''
   })
 }
 
-const totalPrice = computed(() =>
-  cart.value.reduce((s, i) => s + i.quantity * i.unit_price, 0).toFixed(2))
+/** 某一行的单价是否还没填（待补价） */
+const isPricePending = (row) =>
+  row.unit_price === null || row.unit_price === undefined || String(row.unit_price).trim() === ''
 
-const canSubmit = computed(() =>
-  warehouseId.value && cart.value.length > 0 &&
-  cart.value.every((i) => Number.isInteger(Number(i.quantity)) && Number(i.quantity) > 0))
+const totalPrice = computed(() =>
+  cart.value.reduce((s, i) => s + i.quantity * (Number(i.unit_price) || 0), 0).toFixed(2))
+
+const canSubmit = computed(() => {
+  if (!warehouseId.value || !cart.value.length) return false
+  if (!cart.value.every((i) => Number.isInteger(Number(i.quantity)) && Number(i.quantity) > 0)) return false
+  return cart.value.every((i) => {
+    const raw = String(i.unit_price === null || i.unit_price === undefined ? '' : i.unit_price).trim()
+    if (raw === '') return allowPendingPrice.value // 只有成品仓能留空
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 // 填了就必须是大于 0 的数字
+  })
+})
 
 /* ---------------- 新增物料 ---------------- */
 const createVisible = ref(false)
@@ -405,14 +440,18 @@ async function handleSubmit() {
   if (!canSubmit.value || submitting.value) return
   submitting.value = true
   try {
-    const items = cart.value.map((i) => ({
-      material_id: i._id,
-      material_name: i.name,
-      material_spec: i.spec,
-      quantity: Number(i.quantity),
-      unit: i.unit,
-      unit_price: Number(i.unit_price) || 0
-    }))
+    const items = cart.value.map((i) => {
+      const raw = String(i.unit_price === null || i.unit_price === undefined ? '' : i.unit_price).trim()
+      return {
+        material_id: i._id,
+        material_name: i.name,
+        material_spec: i.spec,
+        quantity: Number(i.quantity),
+        unit: i.unit,
+        // 留空 → null（不是 0）：后端据此记为「待补价」，不参与加权成本
+        unit_price: raw === '' ? null : Number(raw)
+      }
+    })
     const sup = String(supplier.value || '').trim()
     const res = await inboundApi.submit({
       warehouse_id: warehouseId.value,
@@ -456,6 +495,23 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+/* 待补价：正常状态，不是错误 —— 用琥珀色提示，别做成红色看起来像报错 */
+.pending-tag {
+  color: #b26a00;
+  background: #fff7e6;
+  border: 1px solid #ffe0a3;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+
+.pending-hint {
+  font-size: 12px;
+  color: #b26a00;
+  font-weight: normal;
 }
 
 .header-tip {

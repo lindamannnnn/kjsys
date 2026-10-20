@@ -92,6 +92,21 @@ function unitPrice(value, label = '单价') {
   return Number(n.toFixed(2))
 }
 
+/**
+ * 单价校验（允许留空）：空 → null，表示「待补价」
+ *
+ * ⚠️ 为什么不能直接当成 0（2026-10-20）：
+ *   销售端未接入时成品仓没有价格数据，员工填不出单价。若按 0 入库，
+ *   移动加权成本会被 0 永久稀释（改不回来），所以这里返回 **null** 而不是 0，
+ *   由 stock.addForInbound 识别为「不参与加权」，成本保持原值。
+ *   空值究竟允不允许，由调用方按仓库决定（配件仓仍必须填价）。
+ */
+function unitPriceOrNull(value, label = '单价') {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  return unitPrice(value, label)
+}
+
 /** 预警库存校验：非负整数 */
 function warningStock(value, label = '预警库存') {
   const n = toNumberStrict(value)
@@ -104,5 +119,6 @@ module.exports = {
   positiveInt,
   nonNegativeInt,
   unitPrice,
+  unitPriceOrNull,
   warningStock
 }

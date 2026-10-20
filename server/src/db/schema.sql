@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS `inbound_orders` (
   `supplier_id`              BIGINT UNSIGNED DEFAULT NULL,
   `source_item_id`           BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '这张入库单由哪条采购明细生成（purchase_task_items.id，0=非采购生成）',
   `total_price`              DECIMAL(14,2) NOT NULL DEFAULT 0.00,
+  `pending_count`            INT          NOT NULL DEFAULT 0 COMMENT '本单有几项单价待补（0=金额完整）',
   `operator_openid`          VARCHAR(64)  NOT NULL DEFAULT '',
   `operator_name`            VARCHAR(64)  NOT NULL DEFAULT '',
   `remark`                   VARCHAR(255) NOT NULL DEFAULT '',
@@ -210,8 +211,9 @@ CREATE TABLE IF NOT EXISTS `inbound_order_items` (
   `material_spec` VARCHAR(191) NOT NULL DEFAULT '',
   `quantity`      DECIMAL(14,3) NOT NULL DEFAULT 0,
   `unit`          VARCHAR(16)  NOT NULL DEFAULT '',
-  `unit_price`    DECIMAL(14,4) NOT NULL DEFAULT 0,
+  `unit_price`    DECIMAL(14,4) DEFAULT NULL COMMENT '单价；NULL=待补价（成品仓上线初期没有价格）',
   `total_price`   DECIMAL(14,2) NOT NULL DEFAULT 0,
+  `price_pending` TINYINT       NOT NULL DEFAULT 0 COMMENT '1=单价待补（未参与加权成本，补价后清零）',
   PRIMARY KEY (`id`),
   KEY `idx_ii_order`    (`order_id`),
   KEY `idx_ii_material` (`material_id`)

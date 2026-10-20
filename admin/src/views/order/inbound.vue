@@ -58,9 +58,11 @@
           </template>
         </el-table-column>
         <!-- 总金额：仓管端按仓库区分 —— 配件仓保留、成品仓不下发（后端 inbound.list 脱敏） -->
-        <el-table-column v-if="showAmount" prop="total_price" label="总金额" width="120">
+        <el-table-column v-if="showAmount" prop="total_price" label="总金额" width="150">
           <template #default="{ row }">
-            ¥{{ Number(row.total_price || 0).toFixed(2) }}
+            <span>¥{{ Number(row.total_price || 0).toFixed(2) }}</span>
+            <!-- 有未定价的项：金额只是「已定价部分」，不是全貌，必须标出来否则会被当成真数 -->
+            <span v-if="Number(row.pending_count) > 0" class="pending-tag">待补价</span>
           </template>
         </el-table-column>
         <el-table-column prop="supplier" label="供应商" width="140">
@@ -141,23 +143,64 @@
         <el-table-column prop="quantity" label="数量" width="90" />
         <el-table-column prop="unit" label="单位" width="70" />
         <!-- 单价 / 小计：同「总金额」，成品仓单据对仓管不下发 -->
-        <el-table-column v-if="showDetailAmount" prop="unit_price" label="单价" width="100">
+        <el-table-column v-if="showDetailAmount" prop="unit_price" label="单价" width="110">
           <template #default="{ row }">
-            ¥{{ Number(row.unit_price || 0).toFixed(2) }}
+            <span v-if="isPendingPrice(row)" class="pending-tag">待补价</span>
+            <span v-else>¥{{ Number(row.unit_price || 0).toFixed(2) }}</span>
           </template>
         </el-table-column>
         <el-table-column v-if="showDetailAmount" prop="total_price" label="小计" width="110">
           <template #default="{ row }">
-            ¥{{ Number(row.total_price || 0).toFixed(2) }}
+            <span v-if="isPendingPrice(row)">—</span>
+            <span v-else>¥{{ Number(row.total_price || 0).toFixed(2) }}</span>
           </template>
         </el-table-column>
       </el-table>
 
-      <template #footer v-if="detail.status === 'pending'">
+      <template #footer v-if="detail.status !== 'cancelled'">
         <el-button @click="detailVisible = false">关闭</el-button>
-        <!-- 修改单价 = inbound.updatePrice，只放行 仓管/管理员；
-             成品仓管看不到金额的单据也不给改价入口，避免「盲改」 -->
-        <el-button v-if="canConfirmRole && showDetailAmount" type="primary" @click="handleUpdatePrice">修改单价</el-button>
+        <!-- 补价 / 改价 = inbound.updatePrice。看不到金额的人不给入口（避免盲改），
+             已确认的单据只有管理员能改 —— 跟后端 constraints 一致 -->
+        <el-button v-if="canUpdatePrice" type="primary" @click="openPriceDialog">
+          {{ hasPendingPrice ? '补录单价' : '修改单价' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 补录 / 修改单价：逐项填，多明细单也能补（一次只改一个价的 prompt 满足不了补价场景） -->
+    <el-dialog v-model="priceDialogVisible" title="补录 / 修改单价" width="680px">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+        title="只填要改的项，留空表示不改"
+        description="补价会把金额计入该物料的库存成本。若这批货已经被出库领用，系统会拦住并提示先核对，不会算出错误的成本。"
+      />
+      <el-table :data="priceRows" size="small" style="width: 100%">
+        <el-table-column prop="material_name" label="物料" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="quantity" label="数量" width="80" />
+        <el-table-column label="原单价" width="110">
+          <template #default="{ row }">
+            <span v-if="row.price_pending" class="pending-tag">待补价</span>
+            <span v-else>¥{{ Number(row.old_price || 0).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="新单价（¥）" width="150">
+          <template #default="{ row }">
+            <el-input v-model="row.unit_price" size="small" placeholder="留空=不改" style="width: 120px" />
+          </template>
+        </el-table-column>
+        <el-table-column label="新小计" width="110">
+          <template #default="{ row }">
+            <span v-if="String(row.unit_price || '').trim() === ''">—</span>
+            <span v-else>¥{{ (Number(row.quantity) * Number(row.unit_price || 0)).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="priceDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="priceSaving" @click="savePrices">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -233,6 +276,90 @@ const showAmount = computed(() => orderList.value.some((r) => r.total_price != n
 
 /** 详情弹窗的金额单独判断：详情是哪张单，就按哪张单算 */
 const showDetailAmount = computed(() => detail.value.total_price != null)
+
+/* ---------- 待补价（2026-10-20：成品仓上线初期没有价格数据） ---------- */
+
+/**
+ * 某一行单价是否「待补价」
+ * ⚠️ 待补价 ≠ 0 元：null 表示这笔钱还没定，0 是「确实不要钱」。
+ *   两者在成本核算里完全不是一回事，界面上必须分开显示。
+ */
+function isPendingPrice(row) {
+  if (!row) return false
+  if (Number(row.price_pending) === 1) return true
+  return row.unit_price === null || row.unit_price === undefined
+}
+
+/** 这张单里还有没有待补价的项 */
+const hasPendingPrice = computed(() => (detail.value.items || []).some(isPendingPrice))
+
+/**
+ * 能不能补价 / 改价：
+ *   - 角色：仓管或管理员（对应后端 roleRules.updatePrice）
+ *   - 看不到金额的人不给入口（成品仓管对成品仓单据本就看不到成本，避免盲改）
+ *   - 已作废不给改；已确认只有管理员能改（与后端 updatePrice 的分档一致）
+ */
+const canUpdatePrice = computed(() => {
+  if (!has('admin', 'storekeeper')) return false
+  if (!showDetailAmount.value) return false
+  const s = detail.value.status
+  if (!s || s === 'cancelled') return false
+  if (s === 'confirmed') return has('admin')
+  return true
+})
+
+const priceDialogVisible = ref(false)
+const priceSaving = ref(false)
+const priceRows = ref([])
+
+/** 打开补价弹窗：逐项列出来，只填要改的 */
+function openPriceDialog() {
+  priceRows.value = (detail.value.items || []).map((it) => ({
+    material_id: it.material_id,
+    material_name: it.material_name,
+    material_spec: it.material_spec,
+    quantity: Number(it.quantity) || 0,
+    unit: it.unit || '',
+    price_pending: isPendingPrice(it),
+    old_price: it.unit_price === null || it.unit_price === undefined ? null : Number(it.unit_price),
+    unit_price: ''
+  }))
+  priceDialogVisible.value = true
+}
+
+/** 保存：留空的不提交（= 不改），只提交填了数字的项 */
+async function savePrices() {
+  const items = []
+  for (const r of priceRows.value) {
+    const raw = String(r.unit_price === null || r.unit_price === undefined ? '' : r.unit_price).trim()
+    if (raw === '') continue
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n <= 0) {
+      ElMessage.error(`「${r.material_name}」的单价必须是大于 0 的数字`)
+      return
+    }
+    items.push({ material_id: r.material_id, unit_price: n })
+  }
+  if (!items.length) {
+    ElMessage.warning('还没有填写任何单价')
+    return
+  }
+
+  priceSaving.value = true
+  try {
+    const res = await inboundApi.updatePrice({ id: detail.value._id, items })
+    const tip = (res && res.message) || ''
+    ElMessage.success(tip || '单价已更新')
+    priceDialogVisible.value = false
+    detailVisible.value = false
+    loadOrders()
+  } catch (err) {
+    // 后端的安全闸门（这批货已出库消耗 → 拒绝自动改成本）会在这里原样显示出来
+    ElMessage.error(err.message || '保存失败')
+  } finally {
+    priceSaving.value = false
+  }
+}
 
 function statusText(status) {
   const map = {
@@ -435,29 +562,6 @@ async function handleCancel(row) {
   }
 }
 
-async function handleUpdatePrice() {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      '输入新的单价，该单所有明细将统一按此单价重算（仅本人当天未确认单据可改）',
-      '修改入库单价',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        inputPlaceholder: '如 12.50',
-        inputValidator: (v) => (v !== '' && Number(v) >= 0) || '请输入有效的单价'
-      }
-    )
-    await inboundApi.updatePrice({ id: detail.value._id, unit_price: Number(value) })
-    ElMessage.success('单价已修改')
-    detailVisible.value = false
-    loadOrders()
-  } catch (err) {
-    if (err !== 'cancel' && err !== 'close') {
-      ElMessage.error(err.message || '修改单价失败')
-    }
-  }
-}
-
 onMounted(() => {
   loadWarehouses()
   loadOrders()
@@ -480,5 +584,18 @@ onMounted(() => {
 .pagination {
   margin-top: 20px;
   justify-content: flex-end;
+}
+
+/* 待补价：正常状态不是错误，用琥珀色，不要做成红色看起来像报错 */
+.pending-tag {
+  display: inline-block;
+  margin-left: 4px;
+  color: #b26a00;
+  background: #fff7e6;
+  border: 1px solid #ffe0a3;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 18px;
 }
 </style>

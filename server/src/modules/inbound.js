@@ -27,7 +27,7 @@
 const { query, queryOne, execute, withTransaction } = require('../db/pool')
 const { ok, fail, errors } = require('../utils/response')
 const { toApi, toDbId, num, money, qty, paging, isSameDay } = require('../utils/format')
-const { positiveInt, unitPrice: validateUnitPrice } = require('../utils/validate')
+const { positiveInt, unitPrice: validateUnitPrice, unitPriceOrNull } = require('../utils/validate')
 const { statusText, typeText } = require('../utils/labels')
 const { resolveWarehouseId } = require('../services/warehouse')
 const {
@@ -59,14 +59,17 @@ function normalizeItems(items) {
     const name = String(it.material_name || materialId)
     // 数量必须是正整数（整改 P0-3.10）
     const quantity = positiveInt(it.quantity, `「${name}」的入库数量`)
-    // 单价非负、最多两位小数
-    const price = validateUnitPrice(it.unit_price, `「${name}」的入库单价`)
+    // 单价：允许留空 → null（待补价）。是否真的允许由仓库决定，见 submit 事务内的校验。
+    // ⚠️ 千万不能把空转成 0：0 会参与加权成本，把已有成本永久稀释。
+    const price = unitPriceOrNull(it.unit_price, `「${name}」的入库单价`)
+    const pending = price === null
     return {
       material_id: materialId,
       material_name: name,
       quantity,
       unit_price: price,
-      total_price: money(price * quantity)
+      price_pending: pending ? 1 : 0,
+      total_price: pending ? 0 : money(price * quantity)
     }
   })
 }
@@ -125,6 +128,9 @@ async function submit(ctx, data = {}) {
   }
 
   const totalPrice = money(items.reduce((s, it) => s + it.total_price, 0))
+  // 单价留空的项数（待补价）。允许哪些仓库留空在事务内按仓库判定。
+  const pendingItems = items.filter((it) => it.price_pending)
+  const pendingCount = pendingItems.length
 
   const run = async (attempt) => {
     try {
@@ -149,6 +155,19 @@ async function submit(ctx, data = {}) {
         }
         ctx.requireWarehouseAccess(wid, '入库单')
 
+        // 待补价（单价留空）只有成品仓允许：
+        //   配件是采购来的，收货必须跟采购价/发票对账，缺价事后根本核不出来；
+        //   成品仓销售端还没接入，客户那边暂无价格数据，先入数量、后补价。
+        if (pendingCount > 0) {
+          const wh = await queryOne('SELECT code FROM warehouses WHERE id = ?', [wid], conn)
+          if (isPartsWarehouse(wh && wh.code)) {
+            throw errors.badRequest(
+              `配件仓入库必须填写单价（未填：${pendingItems.map((it) => `「${it.material_name}」`).join('、')}）。` +
+              '收货要与采购价对账，缺价事后无法核对'
+            )
+          }
+        }
+
         const orderNo = await nextOrderNo(conn, 'inbound')
 
         // 逐项增加库存 + 维护加权平均成本
@@ -169,12 +188,12 @@ async function submit(ctx, data = {}) {
 
         const mainRes = await execute(
           `INSERT INTO inbound_orders
-             (order_no, warehouse_id, type, supplier, supplier_id, total_price,
+             (order_no, warehouse_id, type, supplier, supplier_id, total_price, pending_count,
               operator_openid, operator_name, remark, status,
               client_request_id, is_deleted, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, NOW(), NOW())`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, NOW(), NOW())`,
           [
-            orderNo, wid, type, supplier, supplierId || null, totalPrice,
+            orderNo, wid, type, supplier, supplierId || null, totalPrice, pendingCount,
             operator.openid, operator.name, remark, ctx.clientRequestId || null
           ],
           conn
@@ -184,11 +203,11 @@ async function submit(ctx, data = {}) {
         for (const it of items) {
           await execute(
             `INSERT INTO inbound_order_items
-               (order_id, material_id, material_name, material_spec, quantity, unit, unit_price, total_price)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+               (order_id, material_id, material_name, material_spec, quantity, unit, unit_price, total_price, price_pending)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               orderId, it.material_id, it.material_name, it.material_spec,
-              it.quantity, it.unit, it.unit_price, it.total_price
+              it.quantity, it.unit, it.unit_price, it.total_price, it.price_pending
             ],
             conn
           )
@@ -438,11 +457,17 @@ async function updatePrice(ctx, data = {}) {
   const result = await withTransaction(async (conn) => {
     const locked = await lockMaterialsSorted(conn, changes.map((c) => c.item.material_id))
     const applied = []
+    // 补价了但成本没法安全重算的物料（多个未定价批次混在一起），要如实告诉用户
+    const skippedCost = []
 
     for (const c of changes) {
-      const oldPrice = num(c.item.unit_price)
+      // 补价（原单价为 NULL）与改价（原有价改成另一个价）要分开看：
+      //   补价 = 这笔钱从来没进过库存金额，本轮才第一次计入
+      const wasPending =
+        c.item.unit_price === null || c.item.unit_price === undefined || Number(c.item.price_pending) === 1
+      const oldPrice = wasPending ? 0 : num(c.item.unit_price)
       const stockQty = num(c.item.quantity)
-      if (Math.abs(oldPrice - c.newPrice) < 1e-9) {
+      if (!wasPending && Math.abs(oldPrice - c.newPrice) < 1e-9) {
         applied.push({
           material_id: Number(c.item.material_id),
           material_name: c.item.material_name,
@@ -459,7 +484,7 @@ async function updatePrice(ctx, data = {}) {
 
       const sub = money(c.newPrice * stockQty)
       await execute(
-        'UPDATE inbound_order_items SET unit_price = ?, total_price = ? WHERE id = ?',
+        'UPDATE inbound_order_items SET unit_price = ?, total_price = ?, price_pending = 0 WHERE id = ?',
         [c.newPrice, sub, c.item.id],
         conn
       )
@@ -475,7 +500,58 @@ async function updatePrice(ctx, data = {}) {
         const oldCost = num(material.avg_cost)
         costBefore = oldCost
 
-        if (stockNow > 0) {
+        // ⚠️ 安全闸门（2026-10-20 处理「待补价」时加）：
+        //   下面这套「差额摊到剩余库存」的算法，只在**本批次数量仍完整在库**时成立。
+        //   一旦这批已被出库消耗，已出库那部分的差额也会被摊到剩余库存上 ——
+        //   成本被算高，且事后极难发现。宁可停下让人核对，也不写一个错的数。
+        if (stockNow < stockQty) {
+          throw errors.biz(
+            `「${c.item.material_name}」这批入库 ${stockQty}，当前库存只剩 ${stockNow}，说明已被出库消耗。` +
+            '此时自动修正成本会把已出库那部分的差额摊到剩余库存上，算出错误成本。' +
+            '请先核对该批的出库成本，或联系管理员手工调整'
+          )
+        }
+
+        /**
+         * 补价的成本修正：**只做零歧义的那一种**（2026-10-20 决策）
+         *
+         * ⚠️ 为什么不敢在这里算：空价入库时 avg_cost 是「已定价部分」的成本，不是全部库存的
+         *   平均成本。一旦该物料还有别的未定价批次、或空价之后又入过有价批次，
+         *   从 current_stock 和 avg_cost 两个数**反推不出**已定价金额，任何局部公式都会算偏。
+         *
+         * 所以：
+         *   · 库存数量正好等于本批数量（这批之后没别的进出）→ 成本就该是这个价，直接定，零歧义
+         *   · 其他情况 → 不动成本，标记「待重算」，由以后的全量重算工具按完整流水统一算
+         *
+         * 这样做符合用户口径「现在先不定补价算法，但要把数据存全」：
+         * 不写错数，且流水与单据都完整，将来能一次算对。
+         */
+        let skipCostAdjust = false
+        if (wasPending && !(stockNow === stockQty && stockQty > 0)) {
+          skipCostAdjust = true
+        }
+        // 与「零歧义」无关的常规改价：仍按差额修正
+        if (wasPending && !skipCostAdjust) {
+          costAfter = c.newPrice
+          if (Math.abs(c.newPrice - oldCost) > 1e-9) {
+            await execute('UPDATE materials SET avg_cost = ? WHERE id = ?', [c.newPrice, material.id], conn)
+            material.avg_cost = c.newPrice
+            await writeLog(conn, {
+              materialId: material.id,
+              materialName: material.name,
+              warehouseId: material.warehouse_id,
+              changeType: 'price_adjust',
+              delta: 0,
+              before: stockNow,
+              after: stockNow,
+              orderNo: order.order_no,
+              orderType: 'inbound',
+              operatorOpenid: operator.openid,
+              operatorName: operator.name,
+              remark: `补价首次计入成本：单价 待补 → ${c.newPrice}，成本价 ${oldCost} → ${c.newPrice}`
+            })
+          }
+        } else if (!wasPending && stockNow > 0) {
           let newCost = Number(((oldCost * stockNow + amountDelta) / stockNow).toFixed(4))
           if (newCost < 0) newCost = 0
           costAfter = newCost
@@ -499,6 +575,10 @@ async function updatePrice(ctx, data = {}) {
             })
           }
         }
+
+        if (skipCostAdjust) {
+          skippedCost.push(c.item.material_name)
+        }
       }
 
       applied.push({
@@ -520,9 +600,19 @@ async function updatePrice(ctx, data = {}) {
       conn
     )
     const newTotal = money(sum.s)
-    await execute('UPDATE inbound_orders SET total_price = ? WHERE id = ?', [newTotal, id], conn)
+    // 待补价计数一并重算：全补完就归 0，单据从「金额未定」变成「金额完整」
+    const pc = await queryOne(
+      'SELECT COUNT(*) AS c FROM inbound_order_items WHERE order_id = ? AND price_pending = 1',
+      [id],
+      conn
+    )
+    await execute(
+      'UPDATE inbound_orders SET total_price = ?, pending_count = ? WHERE id = ?',
+      [newTotal, Number(pc.c), id],
+      conn
+    )
 
-    return { applied, newTotal }
+    return { applied, newTotal, pendingLeft: Number(pc.c), skippedCost }
   })
 
   const changed = result.applied.filter((a) => !a.skipped)
@@ -547,11 +637,17 @@ async function updatePrice(ctx, data = {}) {
       total_price: result.newTotal,
       changed: changed.length,
       cost_adjusted: costChanged.length,
+      pending_left: result.pendingLeft,
+      cost_skipped: result.skippedCost,
       items: changed
     },
     changed.length
       ? `单价修改成功，单据金额已更新为 ¥${result.newTotal}` +
-        (costChanged.length ? `，并重算 ${costChanged.length} 项物料的库存成本` : '')
+        (costChanged.length ? `，并重算 ${costChanged.length} 项物料的库存成本` : '') +
+        (result.pendingLeft > 0 ? `；本单还有 ${result.pendingLeft} 项待补价` : '') +
+        (result.skippedCost && result.skippedCost.length
+          ? `；${result.skippedCost.join('、')} 的库存成本暂未自动重算（多个未定价批次混在一起，自动算会出错），等成本重算功能上线后统一处理`
+          : '')
       : '单价没有变化，无需修改'
   )
 }
@@ -689,6 +785,68 @@ async function cancel(ctx, data = {}) {
   return ok(null, '作废成功，库存已回退')
 }
 
+/**
+ * 待补价清单：单价还没补的入库明细（2026-10-20）
+ *
+ * 为什么要单独一张清单：成品仓上线初期没有价格数据，货先入、价后补。
+ * 这批单据的金额是「未定稿」的，必须随时能数清、能查、能清 ——
+ * 否则过几个月没人说得清「到底还有多少单没定价、账面金额差多少」。
+ *
+ * 口径：只看未作废的单据（作废单不产生库存，也不该占用待补名额）。
+ * 金额字段不下发（本来就还没有），数量与单号对所有可见角色开放。
+ */
+async function pendingPriceList(ctx, data = {}) {
+  if (!ctx.user) return fail(401, '请先登录')
+
+  const { page, pageSize, offset } = paging(data, 200)
+  const scope = ctx.warehouseScope('o')
+  const kw = String(data.keyword || '').trim()
+
+  let extra = ''
+  const extraParams = []
+  if (kw) {
+    extra = ' AND (i.material_name LIKE ? OR o.order_no LIKE ?)'
+    extraParams.push(`%${kw}%`, `%${kw}%`)
+  }
+
+  const base = `FROM inbound_order_items i
+      JOIN inbound_orders o ON o.id = i.order_id
+      LEFT JOIN warehouses w ON w.id = o.warehouse_id
+     WHERE i.price_pending = 1
+       AND o.is_deleted = 0
+       AND o.status <> 'cancelled'
+       ${scope.sql} ${extra}`
+  const params = [...scope.params, ...extraParams]
+
+  const cnt = await queryOne(`SELECT COUNT(*) AS c ${base}`, params)
+  const agg = await queryOne(
+    `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(i.quantity), 0) AS qty ${base}`,
+    params
+  )
+  const rows = await query(
+    `SELECT i.id, i.order_id, i.material_id, i.material_name, i.material_spec,
+            i.quantity, i.unit,
+            o.order_no, o.type, o.status, o.warehouse_id, o.operator_name,
+            o.created_at, w.name AS warehouse_name
+       ${base}
+      ORDER BY o.created_at ASC, i.id ASC
+      LIMIT ? OFFSET ?`,
+    [...params, pageSize, offset]
+  )
+
+  return ok({
+    list: toApi(rows),
+    total: Number(cnt.c),
+    page,
+    pageSize,
+    summary: {
+      pending_items: Number(cnt.c),
+      pending_orders: Number(agg.orders),
+      pending_qty: num(agg.qty)
+    }
+  })
+}
+
 /** 待确认数量（按可管仓库收敛） */
 async function pendingCount(ctx) {
   if (!ctx.user) return fail(401, '请先登录')
@@ -712,7 +870,9 @@ module.exports = {
     // 2026-10-09：老板只读，入库相关动作一律收回 boss
     submit: ['storekeeper', 'admin'],
     confirm: ['storekeeper', 'admin'],
-    updatePrice: ['admin', 'storekeeper']
+    updatePrice: ['admin', 'storekeeper'],
+    // 待补价清单：老板/厂长要能盯进度（只读清单，补价仍走 updatePrice）
+    pendingPriceList: ['admin', 'boss', 'storekeeper', 'director']
   },
-  actions: { submit, list, detail, updatePrice, confirm, cancel, pendingCount }
+  actions: { submit, list, detail, updatePrice, confirm, cancel, pendingCount, pendingPriceList }
 }

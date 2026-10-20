@@ -179,10 +179,26 @@ async function overview(ctx, data = {}) {
     cScope.params
   )
 
+  // 待补价（2026-10-20）：这批入库只有数量、还没定价，所以上面的「库存金额」
+  // 只是**已定价部分**，不是全貌。必须把笔数带出去，让看板明确标「金额未定稿」，
+  // 否则老板会把一个偏小的数当成真实库存价值。
+  const pricePending = await queryOne(
+    `SELECT COUNT(*) AS items, COUNT(DISTINCT o.id) AS orders
+       FROM inbound_order_items i
+       JOIN inbound_orders o ON o.id = i.order_id
+      WHERE i.price_pending = 1
+        AND o.is_deleted = 0
+        AND o.status <> 'cancelled' ${oScope.sql}`,
+    oScope.params
+  )
+
   const payload = {
     material_count: num(material.total),
     total_stock: num(material.total_stock),
     total_value: money(material.total_value),
+    // 库存金额是否完整：>0 说明有入库还没定价，上面的 total_value 只含已定价部分
+    price_pending_items: num(pricePending.items),
+    price_pending_orders: num(pricePending.orders),
     warning_count: num(material.warning_count),
     zero_count: num(material.zero_count),
 

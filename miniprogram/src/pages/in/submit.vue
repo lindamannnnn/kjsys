@@ -136,12 +136,12 @@
           </view>
 
           <view class="form-item">
-            <text class="label">单价（元）</text>
+            <text class="label">单价（元）{{ needPrice ? '' : '· 可留空' }}</text>
             <input
               v-model="unitPrice"
               class="input"
               type="digit"
-              placeholder="请输入单价"
+              :placeholder="needPrice ? '请输入单价' : '不确定就先不填'"
               placeholder-class="placeholder"
               @input="calcTotal"
             />
@@ -150,9 +150,13 @@
 
         <view class="form-item">
           <text class="label">小计（元）</text>
-          <view class="total-price">
+          <view v-if="!needPrice && !unitPrice" class="total-price pending">待补价</view>
+          <view v-else class="total-price">
             ¥ {{ totalPrice }}
           </view>
+          <text v-if="!needPrice && !unitPrice" class="price-hint">
+            数量照常入账，这笔先记「待补价」，之后在电脑后台补上金额即可
+          </text>
         </view>
 
         <view class="form-item">
@@ -386,6 +390,19 @@ const remark = ref('')
 const submitting = ref(false)
 
 // 计算属性
+// 当前选中物料所在的仓库（用来判断是不是成品仓）
+const currentWarehouse = computed(() => {
+  const wid = selectedMaterial.value && selectedMaterial.value.warehouse_id
+  if (!wid) return null
+  return warehouses.value.find((w) => Number(w._id) === Number(wid)) || null
+})
+
+// 是否必须填单价（2026-10-20）
+//   成品仓：销售端还没接入，客户那边暂时拿不到价格 → 允许留空，记为「待补价」
+//   其他仓（配件仓）：买来要跟采购价对账，缺价事后核不出来 → 必须填
+// 口径取「不是成品仓就必须填」，多一个仓进来时默认从严，不会误放开。
+const needPrice = computed(() => String((currentWarehouse.value || {}).code || '') !== 'chengpin')
+
 const totalPrice = computed(() => {
   const q = Number(quantity.value) || 0
   const p = Number(unitPrice.value) || 0
@@ -393,11 +410,11 @@ const totalPrice = computed(() => {
 })
 
 const canSubmit = computed(() => {
-  return selectedMaterial.value &&
-         quantity.value &&
-         Number(quantity.value) > 0 &&
-         unitPrice.value &&
-         Number(unitPrice.value) > 0
+  if (!selectedMaterial.value) return false
+  if (!quantity.value || Number(quantity.value) <= 0) return false
+  // 成品仓允许单价留空（待补价）；只要填了就必须大于 0
+  if (!needPrice.value && String(unitPrice.value || '').trim() === '') return true
+  return Number(unitPrice.value) > 0
 })
 
 // 搜索物料
@@ -733,13 +750,16 @@ async function onSubmit() {
   // 强制填写会让这类货入不了账，所以这里不拦。
   // 「有没有供应商」由提交时的 type 体现，见下方 type 的处理。
 
+  // 单价留空 → 传 null（**不能传 0**）：后端据此识别为「待补价」，
+  // 数量照常入账、不参与加权成本；传 0 会被当成零成本把均价稀释掉。
+  const rawPrice = String(unitPrice.value || '').trim()
   const items = [{
     material_id: material._id,
     material_name: material.name,
     material_spec: material.spec,
     quantity: Number(quantity.value),
     unit: material.unit,
-    unit_price: Number(unitPrice.value)
+    unit_price: rawPrice === '' ? null : Number(rawPrice)
   }]
 
   submitting.value = true
@@ -1188,6 +1208,20 @@ onMounted(async () => {
         font-size: 32rpx;
         font-weight: bold;
         color: #0B4F95;
+      }
+
+      /* 待补价：不是错误，是「这笔金额以后再补」的正常状态 */
+      .total-price.pending {
+        color: #B26A00;
+        background: #FFF7E6;
+      }
+
+      .price-hint {
+        display: block;
+        margin-top: 10rpx;
+        font-size: 22rpx;
+        line-height: 1.5;
+        color: #B26A00;
       }
     }
   }
