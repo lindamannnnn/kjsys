@@ -116,7 +116,11 @@ export const materialApi = {
   upsert: (data) => callFunction('material', 'upsert', data),
   import: (data) => callFunction('material', 'import', data),
   delete: (data) => callFunction('material', 'delete', data),
-  categories: (data) => callFunction('material', 'categories', data)
+  categories: (data) => callFunction('material', 'categories', data),
+  // 期初建账：上线后由客户自己填「数量 + 金额」，填完在系统设置里关掉
+  getOpeningMode: (data) => callFunction('material', 'getOpeningMode', data),
+  setOpeningMode: (data) => callFunction('material', 'setOpeningMode', data),
+  setOpening: (data) => callFunction('material', 'setOpening', data)
 }
 
 // 文件上传（照片等，base64 进 upload 模块）

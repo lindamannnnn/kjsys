@@ -67,6 +67,23 @@
           <el-input-number v-model="form.warning_stock" :min="0" />
         </el-form-item>
 
+        <!-- 期初建账：仅在「系统设置 → 期初建账模式」开启时出现，填完关掉即可 -->
+        <template v-if="showOpening">
+          <el-divider content-position="left">期初建账（临时录入）</el-divider>
+          <el-form-item label="期初数量">
+            <el-input-number v-model="openingForm.quantity" :min="0" :precision="3" :step="1" />
+            <span class="tip" style="margin-left:8px">实盘有多少填多少，单位「{{ form.unit }}」</span>
+          </el-form-item>
+          <el-form-item label="期初金额">
+            <el-input-number v-model="openingForm.amount" :min="0" :precision="2" :step="100" />
+            <span class="tip" style="margin-left:8px">这批货的<b>总金额</b>（元），不是单价</span>
+          </el-form-item>
+          <el-form-item label="折算单价">
+            <span class="opening-price">¥{{ openingUnitPrice }}</span>
+            <span class="tip" style="margin-left:8px">＝ 金额 ÷ 数量，保存后成为该物料的成本价</span>
+          </el-form-item>
+        </template>
+
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" placeholder="选填" />
         </el-form-item>
@@ -128,6 +145,43 @@ const warehouses = ref([])
 const detail = ref({})
 
 const isEdit = computed(() => !!route.query.id)
+
+/* ---------------- 期初建账（2026-10-20） ----------------
+ * 只有「系统设置 → 期初建账模式」开启 + 当前角色可编辑时才显示这两个字段。
+ * ⚠️ 前端隐藏只是体验，真正的闸门在后端 setOpening（关掉开关后接口直接拒绝）。
+ */
+const openingMode = ref({ enabled: false, canEdit: false })
+const openingForm = ref({ quantity: 0, amount: 0 })
+const openingBaseline = ref({ quantity: 0, amount: 0 })
+
+const showOpening = computed(
+  () => isEdit.value && openingMode.value.enabled && openingMode.value.canEdit
+)
+
+/** 客户动过才提交，避免每次改个备注都写一条期初流水 */
+const openingDirty = computed(
+  () =>
+    Number(openingForm.value.quantity) !== Number(openingBaseline.value.quantity) ||
+    Number(openingForm.value.amount) !== Number(openingBaseline.value.amount)
+)
+
+/** 金额 ÷ 数量 = 折算单价（仅用于展示，实际由后端按同样口径落库） */
+const openingUnitPrice = computed(() => {
+  const q = Number(openingForm.value.quantity) || 0
+  const a = Number(openingForm.value.amount) || 0
+  return q > 0 ? (a / q).toFixed(2) : '0.00'
+})
+
+async function loadOpeningMode() {
+  try {
+    const res = await materialApi.getOpeningMode()
+    const d = res.data || {}
+    openingMode.value = { enabled: !!d.enabled, canEdit: !!d.canEdit }
+  } catch (e) {
+    // 接口不存在或网络异常时静默降级为「不显示」，不能因此挡住正常编辑
+    openingMode.value = { enabled: false, canEdit: false }
+  }
+}
 
 /** 当前所选仓库的编码（决定细分类叫什么） */
 const currentWarehouseCode = computed(() => {
@@ -256,6 +310,12 @@ async function loadDetail(id) {
       remark: d.remark || '',
       image_fileid: d.image_fileid || ''
     }
+    // 期初字段的初值 = 当前库存 + 当前库存金额，客户照着现状改；
+    // 没改就不提交，避免每次只改个备注也写出一条期初流水。
+    const curQty = Number(d.current_stock) || 0
+    const curCost = Number(d.avg_cost) || 0
+    openingBaseline.value = { quantity: curQty, amount: Number((curQty * curCost).toFixed(2)) }
+    openingForm.value = { ...openingBaseline.value }
   } catch (err) {
     ElMessage.error(err.message || '加载物料详情失败')
     backToList()
@@ -289,7 +349,28 @@ async function handleSubmit() {
     if (form.value._id) payload._id = form.value._id
 
     const res = await materialApi.upsert(payload)
-    ElMessage.success(res.message || (isEdit.value ? '更新成功' : '创建成功'))
+
+    // 期初数量/金额：档案存好之后再单独写（要走库存流水，不能混在档案接口里）
+    let openingMsg = ''
+    if (showOpening.value && openingDirty.value) {
+      try {
+        const r2 = await materialApi.setOpening({
+          id: form.value._id,
+          quantity: Number(openingForm.value.quantity) || 0,
+          amount: Number(openingForm.value.amount) || 0
+        })
+        openingMsg = '；' + (r2.message || '期初已建账')
+        // 写成功了就把基线跟着改掉，避免返回上一页再进来时又被当成"改过"
+        openingBaseline.value = { ...openingForm.value }
+      } catch (e2) {
+        // 档案已经存进去了，这里必须说清楚，不能笼统报"保存失败"
+        ElMessage.error('物料档案已保存，但期初数量/金额没写进去：' + (e2.message || '未知错误'))
+        submitting.value = false
+        return
+      }
+    }
+
+    ElMessage.success((res.message || (isEdit.value ? '更新成功' : '创建成功')) + openingMsg)
     backToList()
   } catch (err) {
     ElMessage.error(err.message || '保存失败')
@@ -303,6 +384,7 @@ onMounted(async () => {
   try {
     if (isEdit.value) await loadDetail(route.query.id)
     await loadBasics()
+    if (isEdit.value) await loadOpeningMode()
   } finally {
     loading.value = false
   }
@@ -337,6 +419,13 @@ watch(
   font-size: 12px;
   color: #999;
   line-height: 1.6;
+}
+
+/* 期初建账折算单价：数字要醒目，客户靠它核对单价有没有填错 */
+.opening-price {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e6541f;
 }
 
 .photo-row {

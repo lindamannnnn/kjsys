@@ -23,6 +23,9 @@ dist/
 **/dist/
 unpackage/
 admin/dist/
+# 本地沙箱里 vite 清空 admin/dist 会被批量删除保护拦下，
+# 于是改用独立输出目录构建；它同样是构建产物，不入库
+admin/dist-deploy/
 
 # ---------- 小程序私有配置 ----------
 miniprogram/project.private.config.json

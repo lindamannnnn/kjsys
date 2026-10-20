@@ -17,6 +17,9 @@ const { resolveWarehouseId } = require('../services/warehouse')
 const { auditFromCtx } = require('../services/audit')
 const { WARNING_COND } = require('../services/warning')
 const { isPureOutUser, maskStockFields, isCostHiddenUser, maskCostFields } = require('../middleware/auth')
+// 期初建账（2026-10-20）：库存与成本仍然只走库存服务，不做「档案直写」，
+// 否则会绕过流水与其他模块的加锁顺序（见 services/stock.js 顶部的并发说明）。
+const { lockMaterial, applyChange } = require('../services/stock')
 
 /** 库存类字段：这些字段只能由库存流水（入库单/盘点）改变，档案接口不得写入 */
 const STOCK_FIELDS = ['current_stock', 'avg_cost', 'stock', 'quantity']
@@ -445,6 +448,164 @@ async function categories(ctx, data = {}) {
   return ok({ list, subCategories, subMap })
 }
 
+/* ============================================================
+ * 期初建账（2026-10-20 新增）
+ * ------------------------------------------------------------
+ * 背景：上线后「数量」和「金额」只有客户自己知道（开发者不可能知道），
+ *   客户需要对着自己现有的表格，一条条把「数量 + 金额」填进系统。
+ *   原来只能走 `scripts/init-stock.js` 填 CSV，老板用不了。
+ *
+ * 做法：在「编辑物料」页临时开两个可填字段，填完在系统设置里关掉。
+ *
+ * ⚠️ 三条硬约束（改动前务必先读）：
+ *   ① 库存仍然走 `applyChange` 写 `stock_logs`，**绝不允许直接 UPDATE current_stock**，
+ *      否则库存流水断链、出事查不到是谁改的。
+ *   ② 成本价是「客户直接给定」的，**不做移动加权平均**——期初不是采购，
+ *      没有「本次入库单价」这回事，加权只会把数字算歪。
+ *   ③ 必须受 `settings.opening_mode` 开关控制，关闭后后端一律拒绝，
+ *      前端隐藏只是体验，真正的闸门在 `setOpening` 里。
+ * ============================================================ */
+
+/**
+ * 谁可以填期初数量/金额
+ * ------------------------------------------------------------
+ * 口径 = 「谁能打开『编辑物料』页」= `page-matrix.json` 里 /material/edit 的角色，
+ *   再对齐「谁能改成本/数量」：
+ *     · 入库单（唯一能设成本的动作）= admin / storekeeper
+ *     · 盘点调整（能改数量）        = admin / storekeeper / director
+ *   取并集 → admin / storekeeper / director。
+ *
+ * ⚠️ 为什么**不**放 boss：2026-10-09 已按用户要求把「物料档案维护」收归
+ *   admin/storekeeper/director，boss 进不了 /material/edit 页。
+ *   若这里只给 boss，实际效果是「老板有权限但打不开页面，能用的人反而没权限」。
+ *
+ * ⚠️ 开关本身（setOpeningMode）仍只给 admin/boss，且 `/setting/company` 仅 admin 可进 ——
+ *   即「由管理员开发开关 → 客户填 → 填完管理员关掉」，与用户确认的操作方式一致。
+ */
+const OPENING_ROLES = ['admin', 'storekeeper', 'director']
+
+/** 读开关（前端据此决定编辑页是否显示这两个字段） */
+async function getOpeningMode(ctx) {
+  if (!ctx.user) return fail(401, '请先登录')
+  const row = await queryOne('SELECT opening_mode FROM settings WHERE id = 1')
+  const roles = Array.isArray(ctx.user.roles) ? ctx.user.roles : []
+  return ok({
+    enabled: Number(row && row.opening_mode) === 1,
+    // ⚠️ 必须与下面的 roleRules.setOpening 口径完全一致，否则会出现
+    //   「界面显示可填、点了却被拒」这种最难排查的错配
+    canEdit: OPENING_ROLES.some((r) => roles.includes(r))
+  })
+}
+
+/** 开关期初建账模式 */
+async function setOpeningMode(ctx, data = {}) {
+  if (!ctx.user) return fail(401, '请先登录')
+  const enabled = data.enabled === true || data.enabled === 1 || data.enabled === '1' ? 1 : 0
+
+  const exists = await queryOne('SELECT id FROM settings WHERE id = 1')
+  if (!exists) return fail(400, '系统设置记录不存在（settings 表缺少 id=1 的行）')
+
+  await execute('UPDATE settings SET opening_mode = ? WHERE id = 1', [enabled])
+  await auditFromCtx(ctx, {
+    action: 'opening_mode',
+    targetType: 'setting',
+    targetId: 1,
+    detail: enabled
+      ? '开启「期初建账」录入模式（编辑物料页可填写期初数量与金额）'
+      : '关闭「期初建账」录入模式（编辑物料页不再显示期初字段，接口同步拒绝写入）'
+  })
+  return ok(
+    { enabled: !!enabled },
+    enabled ? '已开启：现在可以在「编辑物料」里填期初数量与金额' : '已关闭：期初字段已隐藏，接口也会拒绝写入'
+  )
+}
+
+/**
+ * 写期初数量与金额
+ * @param {object} data { id, quantity, amount }
+ *   quantity —— 实盘数量（>=0，最多 3 位小数）
+ *   amount   —— 这批货的总金额（>=0，最多 2 位小数）；单价 = amount / quantity
+ *
+ * 幂等：重复提交同样的数值 → 库存差值为 0 → 不再写流水，只校正成本。
+ */
+async function setOpening(ctx, data = {}) {
+  if (!ctx.user) return fail(401, '请先登录')
+
+  const id = toDbId(data.id || data._id)
+  if (!id) return fail(400, '物料 ID 无效')
+
+  const rawQty = data.quantity
+  const rawAmount = data.amount === undefined || data.amount === null || data.amount === '' ? 0 : data.amount
+  const quantity = Number(rawQty)
+  const amount = Number(rawAmount)
+
+  if (!Number.isFinite(quantity) || quantity < 0) return fail(400, '期初数量必须是不小于 0 的数字')
+  if (!Number.isFinite(amount) || amount < 0) return fail(400, '期初金额必须是不小于 0 的数字')
+  if (quantity > 99999999) return fail(400, '期初数量过大，请核对是否多输了几位')
+  if (amount > 999999999) return fail(400, '期初金额过大，请核对是否多输了几位')
+
+  const qty3 = Number(quantity.toFixed(3))
+  const amount2 = Number(amount.toFixed(2))
+
+  // 开关闸门：以后端为准，绕过前端也写不进去
+  const s = await queryOne('SELECT opening_mode FROM settings WHERE id = 1')
+  if (Number(s && s.opening_mode) !== 1) {
+    return fail(403, '「期初建账」模式已关闭，不能再修改期初数量与金额。如需修改请先到「系统设置」重新开启')
+  }
+
+  const result = await withTransaction(async (conn) => {
+    const material = await lockMaterial(conn, id)
+    ctx.requireWarehouseAccess(material.warehouse_id, '该物料')
+
+    const before = num(material.current_stock)
+    const delta = Number((qty3 - before).toFixed(3))
+    const unitPrice = qty3 > 0 ? Number((amount2 / qty3).toFixed(4)) : 0
+
+    if (delta !== 0) {
+      await applyChange(conn, {
+        material,
+        delta,
+        changeType: 'opening', // 与 inbound/outbound/check 区分，报表与扫描器据此识别「期初」
+        orderNo: '期初建账',
+        orderType: 'opening',
+        operator: {
+          openid: ctx.user.openid || ctx.user.username || '',
+          name: ctx.user.real_name || ctx.user.nickname || ctx.user.username || '未知用户'
+        },
+        remark:
+          `期初建账：账 ${before} → 实 ${qty3}，金额 ¥${amount2.toFixed(2)}` +
+          (qty3 > 0 ? `（单价 ¥${unitPrice.toFixed(2)}）` : ''),
+        // 客户可能先填多了再改小，允许负向调整；结果不会小于 0（quantity 已校验 >= 0）
+        allowNegative: true
+      })
+    }
+
+    // 成本价：直接给定，不做加权平均（理由见本节顶部 ②）
+    await execute('UPDATE materials SET avg_cost = ? WHERE id = ?', [unitPrice, id], conn)
+
+    await auditFromCtx(
+      ctx,
+      {
+        action: 'opening_stock',
+        targetType: 'material',
+        targetId: id,
+        detail:
+          `期初建账「${material.name}」：数量 ${before} → ${qty3}` +
+          `（${delta >= 0 ? '+' : ''}${delta}），金额 ¥${amount2.toFixed(2)}，单价 ¥${unitPrice.toFixed(2)}`
+      },
+      conn
+    )
+
+    return { before, after: qty3, delta, unitPrice, amount: amount2 }
+  })
+
+  const msg =
+    result.delta === 0
+      ? `数量未变（${result.after}），已更新成本价 ¥${result.unitPrice.toFixed(2)}`
+      : `已建账：数量 ${result.before} → ${result.after}，单价 ¥${result.unitPrice.toFixed(2)}，金额 ¥${result.amount.toFixed(2)}`
+  return ok(result, msg)
+}
+
 module.exports = {
   name: 'material',
   publicActions: [],
@@ -455,7 +616,16 @@ module.exports = {
     // 2026-10-09：老板只读，物料档案维护收回 boss
     upsert: ['admin', 'storekeeper', 'director'],
     import: ['admin'],
-    delete: ['admin']
+    delete: ['admin'],
+    // 期初建账：一次性初始化动作，不属于「日常业务操作」。
+    // setOpeningMode 需要 admin/boss（开关只在这两者手上）；
+    // setOpening 的口径见文件内 OPENING_ROLES 的注释 —— 必须与 /material/edit 页角色对齐。
+    // 两个动作都受 settings.opening_mode 开关约束，关掉即失效。
+    setOpeningMode: ['admin', 'boss'],
+    setOpening: OPENING_ROLES
   },
-  actions: { list, detail, upsert, import: importMaterials, delete: remove, categories }
+  actions: {
+    list, detail, upsert, import: importMaterials, delete: remove, categories,
+    getOpeningMode, setOpeningMode, setOpening
+  }
 }

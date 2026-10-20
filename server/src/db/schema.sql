@@ -319,6 +319,7 @@ CREATE TABLE IF NOT EXISTS `settings` (
   `warning_enabled`       TINYINT      NOT NULL DEFAULT 1,
   `warning_notify_boss`   TINYINT      NOT NULL DEFAULT 1,
   `backup_enabled`        TINYINT      NOT NULL DEFAULT 1,
+  `opening_mode`          TINYINT      NOT NULL DEFAULT 0 COMMENT '期初建账录入模式：1=开启（编辑物料页可填期初数量与金额），0=关闭',
   `boss_openids`          JSON         DEFAULT NULL,
   `order_no_prefix_out`   VARCHAR(8)   NOT NULL DEFAULT 'OUT',
   `order_no_prefix_in`    VARCHAR(8)   NOT NULL DEFAULT 'IN',

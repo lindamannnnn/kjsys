@@ -60,6 +60,40 @@
           </el-table>
           <div class="tip">角色为系统内置，如需调整请到「用户管理」中为用户分配角色。</div>
         </el-tab-pane>
+
+        <!-- 期初建账模式（2026-10-20）：上线初期由客户自己填数量与金额，填完关掉 -->
+        <el-tab-pane label="期初建账" name="opening">
+          <el-alert type="warning" :closable="false" class="tip-alert">
+            <p>
+              <b>这是上线初期用的一次性开关。</b>开启后，「编辑物料」页会多出
+              <b>「期初数量」</b>和<b>「期初金额」</b>两格，客户可以对着自己现有的表格一条条填。
+            </p>
+            <p>
+              填完请把它关掉：关掉后字段消失，<b>接口也会同步拒绝写入</b>（不是只把界面藏起来）。
+            </p>
+            <p>
+              填写时会真实改动库存，并在「库存流水」留下 <code>opening</code> 类型的记录
+              （含操作人与时间），不是直接改数字。
+            </p>
+          </el-alert>
+
+          <div class="opening-row">
+            <span class="opening-label">期初建账录入模式</span>
+            <el-switch
+              v-model="openingEnabled"
+              :loading="openingSaving"
+              :disabled="!canEditOpening"
+              active-text="已开启"
+              inactive-text="已关闭"
+              @change="handleToggleOpening"
+            />
+            <span v-if="!canEditOpening" class="tip">只有管理员或老板可以改这个开关。</span>
+          </div>
+
+          <div v-if="openingEnabled" class="opening-hint">
+            现在可以到「物料管理 → 配件仓/成品仓 → 编辑」里填期初数量与金额了。
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -90,15 +124,52 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { warehouseApi, statsApi } from '@/api'
+import { warehouseApi, statsApi, materialApi } from '@/api'
 import { ROLES } from '@/constants/roles'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
 
 const activeTab = ref('warehouse')
 const loading = ref(false)
 const submitting = ref(false)
+
+/* ---------------- 期初建账开关 ---------------- */
+const openingEnabled = ref(false)
+const openingSaving = ref(false)
+/** 只有 admin / boss 能改（后端 roleRules 同口径，前端只是别让人白点） */
+const canEditOpening = computed(() => {
+  const roles = userStore.roles || []
+  return roles.includes('admin') || roles.includes('boss')
+})
+
+async function loadOpeningMode() {
+  try {
+    const res = await materialApi.getOpeningMode()
+    const d = res.data || {}
+    openingEnabled.value = !!d.enabled
+  } catch (e) {
+    console.warn('读取期初建账开关失败:', e.message)
+  }
+}
+
+async function handleToggleOpening(val) {
+  openingSaving.value = true
+  try {
+    const res = await materialApi.setOpeningMode({ enabled: val })
+    ElMessage.success(res.message || '已更新')
+    await loadOpeningMode()
+  } catch (e) {
+    // 失败要把开关拨回去，不能让界面显示成"已开启"但其实没生效
+    openingEnabled.value = !val
+    ElMessage.error(e.message || '切换失败')
+  } finally {
+    openingSaving.value = false
+  }
+}
 
 const warehouseList = ref([])
 
@@ -176,6 +247,9 @@ async function confirmSave() {
 
 onMounted(() => {
   loadAll()
+  // 开关状态必须从后端读，不能默认成"已关闭"——否则客户明明开着，
+  // 管理页却显示关闭，会让人以为要重新开一次
+  loadOpeningMode()
 })
 </script>
 
@@ -200,5 +274,28 @@ onMounted(() => {
   font-size: 12px;
   color: #999;
   line-height: 1.6;
+}
+
+/* 期初建账开关 */
+.opening-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 12px;
+}
+
+.opening-label {
+  font-weight: 600;
+  color: #303133;
+}
+
+.opening-hint {
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #f0f9eb;
+  border-left: 3px solid #67c23a;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #529b2e;
 }
 </style>
