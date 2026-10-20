@@ -176,10 +176,10 @@
           <text class="role-desc">{{ boardDesc }}</text>
         </view>
 
-        <!-- 厂长入口：成品仓出库（2026-10-10 应用户要求从经营看板挪到首页，
-             首页才是厂长的落点，发起动作不该藏在看板里）。
-             只对「纯厂长」显示（与后端 assertDirectorWarehouse 同口径：带 boss/admin 的不算）；
-             进去锁死成品仓、类型只有销售/领用，拣完货发消息回来让厂长确认 -->
+        <!-- 成品仓出库入口（2026-10-10 从经营看板挪到首页；2026-10-20 加成品仓管）
+             可见范围：纯厂长（带 boss/admin 的不算，与后端 assertDirectorWarehouse 同口径）
+                     + 成品仓管（storekeeper 且可管成品仓，配件仓管不给）
+             进去锁死成品仓、类型只有销售/领用 -->
         <view v-if="canFinishOut" class="role-card role-card-finishout" @click="goFinishOut">
           <view class="role-icon">🚚</view>
           <text class="role-title">成品仓出库</text>
@@ -448,13 +448,26 @@ function goBoss() {
 }
 
 /**
- * 厂长专属「成品仓出库」（首页入口，2026-10-10 从经营看板挪来）
- * 老板是只读角色、管理员走后台，都不给这个写入口。
- * ⚠️ 这里锁死只是体验，不是防线：后端 outbound.submit 里的 assertDirectorWarehouse
- *    会按物料实际所属仓库再判一次，改 URL 参数绕不过去。
+ * 「成品仓出库」入口：纯厂长 + 成品仓管（2026-10-20 用户要求把仓管补上）
+ * - 纯厂长：director 且不带 boss/admin（老板只读、管理员走后台）
+ * - 成品仓管：storekeeper 且「我可管仓库」里有成品仓
+ *
+ * ⚠️ **绝不能只判 storekeeper**：配件仓管同样是 storekeeper，只加角色会把他一起放进来，
+ *    等于让配件仓管开成品仓的单（跨仓）。这与后台 page-matrix.json 里
+ *    /order/outbound-create 的「roles + warehouseCode 双门」是同一口径，两边别写歪。
+ *    warehouseList 由后端按「我可管仓库」过滤（warehouse.list），
+ *    实测：成品仓管只拿到 chengpin、配件仓管只拿到 peijian，用它判最准。
+ *
+ * ⚠️ 这里只是体验，不是防线：后端 outbound.submit 的 requireWarehouseAccess
+ *    会按物料实际所属仓库再判一次，改 URL 参数绕不过去（配件仓管跨仓实测 403）。
  */
-const canFinishOut = computed(() =>
-  userStore.hasRole(['director']) && !userStore.hasRole(['boss', 'admin']))
+const canFinishOut = computed(() => {
+  // 纯厂长（与后端 assertDirectorWarehouse 同口径：带 boss/admin 的不算）
+  if (userStore.hasRole(['director']) && !userStore.hasRole(['boss', 'admin'])) return true
+  // 成品仓管：角色 + 仓库两个条件缺一不可
+  return !!(userStore.isStorekeeper
+    && warehouseList.value.some((w) => w.code === 'chengpin'))
+})
 
 function goFinishOut() {
   // wh=chengpin → out/submit 锁死成品仓、隐藏切仓条、类型换成销售/领用
