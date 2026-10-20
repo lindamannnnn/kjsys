@@ -560,7 +560,7 @@ async function main() {
     console.log('\n=== B. 后台逐账号逐页真实巡检 ===')
     const tours = {
       peijian: ['/dashboard', '/material/parts', '/order/outbound', '/order/inbound', '/order/inbound-create', '/order/purchase-tasks', '/message/list', '/check/list'],
-      chengpin: ['/dashboard', '/material/product', '/order/outbound', '/order/inbound', '/order/purchase-tasks', '/message/list'],
+      chengpin: ['/dashboard', '/material/product', '/order/outbound', '/order/outbound-create', '/order/inbound', '/order/purchase-tasks', '/message/list'],
       changzhang: ['/dashboard', '/material/parts', '/material/product', '/order/outbound', '/order/outbound-create', '/order/purchase-tasks', '/message/list', '/check/list'],
       admin: ['/dashboard', '/stats/overview', '/user/list', '/material/list', '/order/outbound', '/order/inbound', '/order/inbound-create', '/order/outbound-create', '/order/purchase-tasks', '/message/list', '/check/list', '/system/logs']
     }
@@ -574,14 +574,15 @@ async function main() {
         if (r === '/dashboard') await shotAdmin(page, `B-${user}-首页`)
       }
     }
-    // 越权：成品仓管不该进「新建出库单」（厂长专属）
-    await adminLogin(page, 'chengpin')
-    const vGate = await visitAdmin(page, '/order/outbound-create', 'chengpin')
+    // 越权（2026-10-20 口径变更）：成品仓管已开放「成品仓出库」开单入口，
+    //   现在该被拦的是**配件仓管**（同样是 storekeeper，靠 warehouseCode=chengpin 挡）
+    await adminLogin(page, 'peijian')
+    const vGate = await visitAdmin(page, '/order/outbound-create', 'peijian')
     const bounced = !page.url().includes('/order/outbound-create')
-    ok('B-越权', '成品仓管访问厂长专属「新建出库单」被拦（弹回自己首页）', bounced, `最终 url=${page.url()}`)
-    const menuHas = await page.evaluate(() => (document.body.innerText || '').includes('新建出库单'))
-    ok('B-越权', '成品仓管菜单里没有「新建出库单」', !menuHas)
-    note('后台体验', '成品仓管越权', `访问 /order/outbound-create → ${page.url()}（弹回=${bounced}）`)
+    ok('B-越权', '配件仓管访问「成品仓出库」被拦（弹回自己首页）', bounced, `最终 url=${page.url()}`)
+    const menuHas = await page.evaluate(() => (document.body.innerText || '').includes('成品仓出库'))
+    ok('B-越权', '配件仓管菜单里没有「成品仓出库」', !menuHas)
+    note('后台体验', '配件仓管越权', `访问 /order/outbound-create → ${page.url()}（弹回=${bounced}）`)
 
     /* ================= D. 数据一致性：两端显示金额 vs 数据库 ================= */
     console.log('\n=== D. 数据一致性：后台/小程序显示金额 vs 数据库 ===')

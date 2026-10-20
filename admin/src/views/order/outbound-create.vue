@@ -1,36 +1,38 @@
 <template>
   <div class="outbound-create">
-    <!-- 厂长模式提示条（与小程序一致） -->
+    <!-- 成品仓模式提示条（纯厂长 / 成品仓管，与小程序一致） -->
     <el-alert
-      v-if="isPureDirector"
+      v-if="chengpinMode"
       type="primary"
       :closable="false"
       class="mode-banner"
       title="🚚 成品仓出库"
-      description="提交后由成品仓管拣货，拣完会通知你确认收货。"
+      :description="isPureDirector
+        ? '提交后由成品仓管拣货，拣完会通知你确认收货。'
+        : '这里只能对成品仓开单；提交后由仓管拣货，拣完由提交人确认收货。'"
     />
 
     <el-card v-loading="pageLoading">
       <template #header>
         <div class="card-header">
-          <span>{{ isPureDirector ? '成品仓出库（新建出库单）' : '新建出库单' }}</span>
+          <span>{{ chengpinMode ? '成品仓出库（新建出库单）' : '新建出库单' }}</span>
           <span class="header-tip">对应小程序「成品仓出库」：选物料 → 填数量 → 选类型 → 提交</span>
         </div>
       </template>
 
       <el-form label-width="100px">
-        <!-- 仓库：厂长锁死成品仓；admin 任选 -->
+        <!-- 仓库：纯厂长 / 成品仓管锁死成品仓；admin 任选 -->
         <el-form-item label="出库仓库" required>
           <el-select
             v-model="warehouseId"
             placeholder="选择仓库"
-            :disabled="isPureDirector"
+            :disabled="chengpinMode"
             style="width: 240px"
             @change="onWarehouseChange"
           >
             <el-option v-for="w in availableWarehouses" :key="w._id" :label="w.name" :value="w._id" />
           </el-select>
-          <span v-if="isPureDirector" class="tip">厂长只能从成品仓发起出库（配件仓领料请找仓管开单）</span>
+          <span v-if="chengpinMode" class="tip">只能对成品仓开单（配件仓领料由配件仓管开单）</span>
         </el-form-item>
 
         <el-form-item label="出库类型" required>
@@ -191,6 +193,17 @@ const availableWarehouses = computed(() => {
   return warehouses.value
 })
 
+/**
+ * 成品仓模式 = 纯厂长，或「只看得见成品仓」的仓管（2026-10-20 用户要求给成品仓管开单入口）。
+ * 为什么不按角色写死：仓管是按 warehouse_ids 分仓的，同一个 storekeeper 可能是配件仓管，
+ *   用「仓库列表里只有成品仓」来判断既覆盖厂长、也覆盖成品仓管，不会误伤双仓仓管（[1,2] 仍可任选）。
+ * ⚠️ 这里只是体验：真防线是后端 outbound.submit（仓管本来就被放行）+ 仓库权限校验。
+ */
+const chengpinMode = computed(() => {
+  const list = availableWarehouses.value
+  return list.length > 0 && list.every((w) => w.code === 'chengpin')
+})
+
 const currentWhName = computed(() =>
   (warehouses.value.find((w) => w._id === warehouseId.value) || {}).name || '—')
 
@@ -210,7 +223,7 @@ const subCategoryLabel = computed(() => {
   return '分类'
 })
 
-const outTypes = computed(() => (isPureDirector.value
+const outTypes = computed(() => (chengpinMode.value
   ? [{ value: 'sale', label: '销售' }, { value: 'lingyong', label: '领用' }]
   : [{ value: 'lingyong', label: '领用' }, { value: 'repair', label: '维修' }, { value: 'sale', label: '销售' }]))
 const outType = ref('')
@@ -314,7 +327,9 @@ async function handleSubmit() {
     ElMessage.success(
       isPureDirector.value
         ? `出库单 ${orderNo} 已提交，等成品仓管拣货，拣完会通知你确认`
-        : `出库单 ${orderNo} 已提交，等待仓管确认拣货`
+        : userStore.hasRole('storekeeper')
+          ? `出库单 ${orderNo} 已提交，可在「出库单」里确认拣货`
+          : `出库单 ${orderNo} 已提交，等待仓管确认拣货`
     )
     router.push('/order/outbound')
   } catch (err) {

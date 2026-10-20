@@ -16,7 +16,12 @@
     "  group    —— 菜单分组 key（见 menu.js 的 MENU_GROUPS）",
     "  icon     —— Element Plus 图标名（仅菜单项用）",
     "  warehouseCode —— 该菜单只对管这个仓的角色显示（配件仓管只看配件仓）",
-    "  homeOf   —— 该页是哪些角色的落地首页（登录后跳这里）"
+    "  homeOf   —— 该页是哪些角色的落地首页（登录后跳这里）",
+    "",
+    "2026-10-20：/order/outbound-create 增加 storekeeper + warehouseCode=chengpin ——",
+    "  用户要求「给成品仓管开成品仓出库入口」。角色门只认角色，配件仓管同样是 storekeeper，",
+    "  所以必须同时用 warehouseCode 把配件仓管挡在外面（菜单过滤 + 路由仓库门）。",
+    "  后端 outbound.submit 本来就放行 storekeeper，无需改 roleRules。"
   ],
   "pages": {
     "/dashboard": {
@@ -190,11 +195,12 @@
     },
     "/order/outbound-create": {
       "title": "成品仓出库",
-      "roles": ["admin", "director"],
+      "roles": ["admin", "director", "storekeeper"],
       "must": ["material.list", "material.categories", "warehouse.list", "outbound.submit"],
       "optional": [],
       "menu": true,
-      "group": "order"
+      "group": "order",
+      "warehouseCode": "chengpin"
     },
     "/order/purchase-tasks": {
       "title": "采购任务",

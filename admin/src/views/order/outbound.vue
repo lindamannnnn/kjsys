@@ -181,6 +181,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { outboundApi, warehouseApi, exportApi } from '@/api'
 import { useUserStore } from '@/store/user'
+import { allowsWarehouse } from '@/constants/warehouse-scope'
 
 const userStore = useUserStore()
 
@@ -198,8 +199,11 @@ function myIdentity() {
 const canConfirmRole = computed(() => has('storekeeper', 'admin'))
 // 代确认收货：领料员/采购/仓管/管理员/厂长都可以（厂长发起成品仓出库后由他确认）
 const canReceiveRole = computed(() => has('out', 'purchase', 'storekeeper', 'admin', 'director'))
-// 新建出库单：厂长（成品仓出库）+ 管理员（与小程序入口一致；仓管在小程序里也没有领料出库入口）
-const canCreate = computed(() => has('admin', 'director'))
+// 新建出库单：厂长（成品仓出库）+ 管理员 + 成品仓管（2026-10-20 用户要求开入口）
+// ⚠️ 配件仓管同样是 storekeeper，但该页声明了 warehouseCode=chengpin，他点进去会被路由弹回，
+//    所以这里也按「管不管成品仓」再挡一次，别让人点了才发现进不去。
+const canCreate = computed(() =>
+  has('admin', 'director') || (has('storekeeper') && allowsWarehouse('chengpin')))
 
 const loading = ref(false)
 const exporting = ref(false)
