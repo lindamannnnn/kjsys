@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>文文进出库 · 岗位操作手册</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Microsoft YaHei", "微软雅黑", "SimHei", sans-serif;
+    font-size: 10.5pt; line-height: 1.75; color: #1f2328; margin: 0;
+  }
+  h1, h2, h3, h4 { margin: 0; font-weight: 700; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  code {
+    font-family: Consolas, "Courier New", monospace; background: #f1f3f5;
+    padding: 1px 4px; border-radius: 3px; font-size: 9.5pt; color: #b03030;
+  }
+  b, strong { color: #111; }
+
+  /* ---------- 封面 ---------- */
+  .cover { height: 258mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
+  .cover-tag { font-size: 11pt; letter-spacing: 6px; color: #1f6feb; font-weight: 700; }
+  .cover h1 { font-size: 34pt; line-height: 1.3; margin: 14px 0 6px; letter-spacing: 2px; }
+  .cover .sub { font-size: 15pt; color: #57606a; margin-bottom: 28px; }
+  .cover-line { height: 5px; width: 120px; background: #1f6feb; margin: 10px 0 30px; }
+  .cover-box { border: 1px solid #d0d7de; border-radius: 8px; padding: 16px 20px; background: #f8f9fb; }
+  .cover-box .row { display: flex; font-size: 10.5pt; padding: 5px 0; border-bottom: 1px dashed #e1e4e8; }
+  .cover-box .row:last-child { border: 0; }
+  .cover-box .k { width: 92px; color: #57606a; flex: none; }
+  .cover-foot { margin-top: 28px; font-size: 9.5pt; color: #8b949e; }
+
+  /* ---------- 章标题 ---------- */
+  .chapter { page-break-before: always; }
+  .ch-head { border-left: 6px solid #1f6feb; padding: 2px 0 2px 12px; margin: 0 0 14px; }
+  .ch-head .no { font-size: 10pt; color: #1f6feb; font-weight: 700; letter-spacing: 2px; }
+  .ch-head h2 { font-size: 19pt; margin-top: 2px; }
+  h3 {
+    font-size: 12.5pt; margin: 16px 0 8px; padding-bottom: 4px;
+    border-bottom: 2px solid #eaecef;
+    break-after: avoid; page-break-after: avoid;
+  }
+  h4 { font-size: 11pt; margin: 12px 0 4px; color: #24292f; break-after: avoid; page-break-after: avoid; }
+
+  /* ---------- 岗位身份条 ---------- */
+  .idcard { display: flex; gap: 10px; margin: 0 0 12px; }
+  .idcard > div { flex: 1; border: 1px solid #d0d7de; border-radius: 6px; padding: 8px 12px; background: #fafbfc; }
+  .idcard .lbl { font-size: 8.8pt; color: #8b949e; }
+  .idcard .val { font-size: 11pt; font-weight: 700; margin-top: 1px; }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 10px; font-size: 9.6pt; }
+  th, td { border: 1px solid #d0d7de; padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; font-weight: 700; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  td.c, th.c { text-align: center; }
+  tr:nth-child(even) td { background: #fcfcfd; }
+  .yes { color: #1a7f37; font-weight: 700; }
+  .no { color: #b0b7bf; }
+
+  /* ---------- 步骤 ---------- */
+  .steps { list-style: none; padding: 0; margin: 8px 0 10px; counter-reset: s; }
+  .steps > li {
+    counter-increment: s; position: relative; padding: 6px 0 6px 32px;
+    border-bottom: 1px dashed #e8ebee; break-inside: avoid; page-break-inside: avoid;
+  }
+  .steps > li:last-child { border-bottom: 0; }
+  .steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: 7px;
+    width: 21px; height: 21px; line-height: 21px; text-align: center;
+    background: #1f6feb; color: #fff; border-radius: 50%;
+    font-size: 9.5pt; font-weight: 700;
+  }
+
+  /* ---------- 提示框 ---------- */
+  .tip, .warn, .key {
+    border-radius: 6px; padding: 8px 12px; margin: 10px 0; font-size: 9.8pt; line-height: 1.65;
+    page-break-inside: avoid;
+  }
+  .tip { background: #eef6ff; border-left: 4px solid #1f6feb; }
+  .warn { background: #fff5eb; border-left: 4px solid #d97706; }
+  .key { background: #ecfdf3; border-left: 4px solid #1a7f37; }
+  .tip .t, .warn .t, .key .t { font-weight: 700; display: block; margin-bottom: 2px; }
+  .tip .t { color: #0b4f95; }
+  .warn .t { color: #b45309; }
+  .key .t { color: #1a7f37; }
+
+  /* ---------- 流程条 ---------- */
+  .flow { display: flex; align-items: stretch; margin: 10px 0; page-break-inside: avoid; }
+  .flow .step {
+    flex: 1; border: 1px solid #d0d7de; border-radius: 6px; padding: 7px 6px;
+    text-align: center; background: #fafbfc; font-size: 9.2pt; line-height: 1.45;
+  }
+  .flow .step .who { display: block; font-size: 8.4pt; color: #8b949e; }
+  .flow .step .what { display: block; font-weight: 700; margin-top: 2px; }
+  .flow .arrow { width: 18px; display: flex; align-items: center; justify-content: center; color: #8b949e; font-size: 11pt; }
+
+  /* ---------- 目录 ---------- */
+  .toc-item { display: flex; padding: 5px 0; border-bottom: 1px dotted #d8dee4; font-size: 10.5pt; }
+  .toc-item .n { width: 30px; color: #1f6feb; font-weight: 700; flex: none; }
+  .toc-item .t { flex: 1; }
+  .toc-item .w { color: #8b949e; font-size: 9pt; }
+  .toc-sub { padding-left: 30px; font-size: 9.5pt; color: #57606a; }
+
+  .small { font-size: 9pt; color: #57606a; }
+  .pagebreak { page-break-before: always; }
+  .mono-list { columns: 2; column-gap: 24px; margin: 6px 0; }
+  .mono-list div { font-size: 9.8pt; padding: 2px 0; break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<!-- ==================== 封面 ==================== -->
+<div class="cover">
+  <div class="cover-tag">SHENGLONG · 内部使用</div>
+  <div class="cover-line"></div>
+  <h1>文文进出库<br>岗位操作手册</h1>
+  <div class="sub">手机小程序 + 电脑后台 · 六个岗位照着做</div>
+
+  <div class="cover-box">
+    <div class="row"><span class="k">适用系统</span><span>文文进出库（微信小程序）／胜龙进销存后台（网页）</span></div>
+    <div class="row"><span class="k">手机端</span><span>微信打开小程序「文文进出库」</span></div>
+    <div class="row"><span class="k">电脑端</span><span>浏览器打开 https://sl.ekkosys.cn/admin/</span></div>
+    <div class="row"><span class="k">覆盖岗位</span><span>领料员 · 仓管员 · 采购员 · 厂长 · 老板 · 管理员</span></div>
+    <div class="row"><span class="k">版本日期</span><span>2026 年 10 月 20 日　（第 1 版）</span></div>
+  </div>
+
+  <div class="cover-foot">
+    本手册按「岗位」编排。<b>只看自己那一章就够了</b>，其余章节是给别人的。<br>
+    遇到手册没写的情况，先联系管理员，不要自己猜测着改数据。
+  </div>
+</div>
+
+<!-- ==================== 目录 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CONTENTS</div>
+    <h2>目录与速查</h2>
+  </div>
+
+  <div class="toc-item"><span class="n">0</span><span class="t">开始之前：两个入口、三件必知</span><span class="w">所有人</span></div>
+  <div class="toc-item"><span class="n">1</span><span class="t">领料员（车间）</span><span class="w">领料、报废、确认收货</span></div>
+  <div class="toc-item"><span class="n">2</span><span class="t">仓管员（配件仓 / 成品仓）</span><span class="w">入库、确认、拣货、盘点</span></div>
+  <div class="toc-item"><span class="n">3</span><span class="t">采购员</span><span class="w">领任务、买货、录单价</span></div>
+  <div class="toc-item"><span class="n">4</span><span class="t">厂长</span><span class="w">看数、发起成品仓出库、审盘点</span></div>
+  <div class="toc-item"><span class="n">5</span><span class="t">老板</span><span class="w">看数、管人、查日志</span></div>
+  <div class="toc-item"><span class="n">6</span><span class="t">管理员</span><span class="w">全部功能、系统设置</span></div>
+  <div class="toc-item"><span class="n">7</span><span class="t">常见问题 15 问</span><span class="w">卡住了先翻这里</span></div>
+  <div class="toc-item"><span class="n">附</span><span class="t">单据状态对照表</span><span class="w">一看到状态就知道该谁动手</span></div>
+
+  <h3>一眼看懂：货是怎么走的</h3>
+  <p class="small">下面两条线是全系统的主干。看懂这两张图，后面各章都只是细节。</p>
+
+  <h4>一、领料（从仓库把货领到车间）</h4>
+  <div class="flow">
+    <div class="step"><span class="who">领料员</span><span class="what">手机提交领料单</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="who">仓管</span><span class="what">确认这张单</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="who">仓管</span><span class="what">去拣货，点「拣货完成」</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="who">领料员</span><span class="what">点「确认收货」<br><b>此时才扣库存</b></span></div>
+  </div>
+  <div class="warn">
+    <span class="t">最容易搞错的一点</span>
+    领料单「提交」时<b>不扣库存</b>。要等货真正领到手、点「确认收货」那一秒，库存才减。
+    所以单据状态还停在「待确认」的时候，仓库里的数是不动的。
+  </div>
+
+  <h4>二、采购（从外面把货买回来）</h4>
+  <div class="flow">
+    <div class="step"><span class="who">仓管</span><span class="what">发起采购任务</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="who">采购员</span><span class="what">领取任务、去买</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="who">采购员</span><span class="what">回来填单价、单号、拍照</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="who">仓管</span><span class="what">逐项「到货入库」<br><b>此时才加库存</b></span></div>
+  </div>
+  <div class="warn">
+    <span class="t">入库反过来：提交就加库存</span>
+    仓管在「入库登记」里点提交，<b>库存立刻加</b>，不用等谁确认。所以入库的数量和单价一定要当场核对清楚。
+  </div>
+</div>
+
+<!-- ==================== 第0章 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 00</div>
+    <h2>开始之前：两个入口、三件必知</h2>
+  </div>
+
+  <h3>0.1 系统有两个入口，用哪个？</h3>
+  <table>
+    <thead><tr>
+      <th style="width:22%">入口</th><th style="width:38%">怎么打开</th><th>适合干什么</th>
+    </tr></thead>
+    <tr>
+      <td><b>手机小程序</b><br><span class="small">「文文进出库」</span></td>
+      <td>微信 → 搜索小程序「文文进出库」→ 点进去；或用微信扫管理员发的码</td>
+      <td>仓库里跑动时用：领料、入库登记、拣货确认、盘点录入、拍照上传。<b>站在货架前就用这个。</b></td>
+    </tr>
+    <tr>
+      <td><b>电脑后台</b><br><span class="small">网页</span></td>
+      <td>电脑浏览器输入 <code>https://sl.ekkosys.cn/admin/</code></td>
+      <td>坐着办公时用：批量看单、导出表格、改物料资料、审批、查台账、看统计。<b>对账和批量操作就用这个。</b></td>
+    </tr>
+  </table>
+  <div class="key">
+    <span class="t">两边是同一份数据</span>
+    手机上提交的单据，电脑上刷新就能看到；电脑上改的物料，手机上马上也是新的。<b>不存在「两边对不上」这回事</b>，如果看到不一样，多半是手机页面没刷新（下拉一下就刷新了）。
+  </div>
+
+  <h3>0.2 怎么登录</h3>
+  <h4>手机（微信小程序）</h4>
+  <ol class="steps">
+    <li>微信搜索「文文进出库」，或在微信里扫管理员给的二维码。</li>
+    <li>点「微信一键登录」，微信会问你要不要授权，<b>点允许</b>。</li>
+    <li><b>第一次登录会停在「等待管理员审批」</b>。这是正常的——你的身份还没定，需要管理员在电脑后台把「岗位」和「能管哪个仓」配给你。</li>
+    <li>管理员配完后，退出小程序重新进一次，首页就会出现你的功能卡片。</li>
+  </ol>
+
+  <h4>电脑（后台网页）</h4>
+  <ol class="steps">
+    <li>浏览器输入 <code>https://sl.ekkosys.cn/admin/</code>。</li>
+    <li>输入管理员发给你的<b>账号</b>和<b>密码</b>。账号规则一般是 <code>sl</code> + 岗位拼音，例如仓管是 <code>slpeijian</code>。</li>
+    <li>第一次登录如果要求改密码，改完记住新的，<b>别忘了</b>（管理员也看不到你的密码，忘了只能重置）。</li>
+    <li>登录后看<b>左上角</b>：会写「后台管理系统 / 配件仓后台 / 成品仓后台 / 采购后台 / 经营看板」，不同岗位显示不同，这是正常现象。</li>
+  </ol>
+  <div class="warn">
+    <span class="t">手机登录和电脑登录是两套身份吗？</span>
+    不是同一把钥匙。手机上你用的是<b>微信</b>；电脑上用的是<b>账号密码</b>。
+    有些老员工只有微信登录（扫过码注册的），<b>没有账号密码，所以电脑登不进去</b>——需要管理员在「用户管理」里给他补一个账号密码。
+  </div>
+
+  <h3>0.3 三件必知</h3>
+
+  <h4>① 首页的卡片，就是你能干的事</h4>
+  <p>不同岗位首页卡片不一样，这是<b>按岗位配好的</b>，不是坏了。你看不到「入库登记」，说明入库不该你做；你看不到「成品仓出库」，同理。<b>找不到功能先问自己：这是不是我的活？</b></p>
+
+  <h4>② 消息中心会主动告诉你该动手了</h4>
+  <p>手机上首页下方有「消息」入口，后台左边有「消息中心」，<b>有红点就是有活等着你</b>。常见的几种：</p>
+  <ul>
+    <li>仓管：「有新的领料单待确认」「盘点已提交待审核」「采购到货待收」</li>
+    <li>领料员：「你的领料单已拣货，请确认收货」「你的单被驳回」</li>
+    <li>采购员：「有新采购任务可以领」</li>
+    <li>厂长 / 管理员：「有盘点单等你审核」</li>
+  </ul>
+
+  <h4>③ 金额不是所有人都能看</h4>
+  <div class="warn">
+    <span class="t">仓管员、领料员默认看不到金额</span>
+    这是<b>故意设的</b>，不是系统错了。仓管只看数量、单位，页面上的单价、金额栏是空的或者不显示；
+    领料员同样看不到金额。老板、厂长、采购员、管理员能看到金额和成本。
+    如果一个仓管同时被分配了「厂长」身份，那就按能看的算。
+  </div>
+</div>
+
+<!-- ==================== 第1章 领料员 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 01</div>
+    <h2>领料员（车间）</h2>
+  </div>
+
+  <div class="idcard">
+    <div><div class="lbl">你是谁</div><div class="val">车间要料的人</div></div>
+    <div><div class="lbl">主要用</div><div class="val">手机小程序</div></div>
+    <div><div class="lbl">手机卡片</div><div class="val">领料出库、报废申请、库存流水</div></div>
+    <div><div class="lbl">电脑后台</div><div class="val">只有消息中心</div></div>
+  </div>
+
+  <div class="tip">
+    <span class="t">一句话说清你的活</span>
+    车间缺什么，你用手机提单领；仓库把货拣好了，你点「确认收货」。<b>你点的这一下，才算真正把货领走。</b>
+  </div>
+
+  <h3>1.1 手机上你有 4 个入口</h3>
+  <table>
+    <thead><tr><th style="width:20%">卡片</th><th style="width:40%">干什么</th><th>什么时候用</th></tr></thead>
+    <tr><td><b>领料出库</b></td><td>提领料单（要多少个、什么货）</td><td>车间缺料，需要仓库发货时</td></tr>
+    <tr><td><b>报废申请</b></td><td>东西坏了、废了，申请报废，<b>必须拍照 + 写原因</b></td><td>物料损坏、做废了、不能再用</td></tr>
+    <tr><td><b>库存流水</b></td><td>查每一笔出入库记录</td><td>想确认自己的单走到哪一步、领过什么</td></tr>
+    <tr><td><b>消息</b></td><td>系统通知</td><td>看到红点就点开，别让它一直亮着</td></tr>
+  </table>
+  <p class="small">电脑后台你只有「消息中心」一项。领料、报废都是手机上做的事，后台没开这些入口，不用去后台找。</p>
+
+  <h3>1.2 领料出库：完整 6 步</h3>
+  <ol class="steps">
+    <li><b>点首页「领料出库」。</b></li>
+    <li><b>找货。</b>顶上可以打字搜（输名称或规格，比如「火花塞」「M14」），也可以点右边的相机图标扫码。
+      下面还能按仓库、按分类（细分类）筛，货多的时候先筛一下快。</li>
+    <li><b>加数量。</b>点中物料后填你要的数量，再点「加入清单」。要几样就重复几次。</li>
+    <li><b>选出库类型。</b>车间自己用选「领用」；机器坏了要修选「维修」。
+      <span class="small">（如果是厂长发起成品仓出库，类型是「销售」或「领用」，那是另一条线，你不用管。）</span></li>
+    <li><b>填写用途/备注（选填）。</b>建议写一句，比如「3 号线换件」，被驳回时也好对账。</li>
+    <li><b>点「提交出库（N 项）」。</b>提交成功就等仓库确认。</li>
+  </ol>
+  <div class="key">
+    <span class="t">提交的时候库存还不减</span>
+    这时候单子的状态是「<b>待确认</b>」。仓库那边确认、拣货，都还没有真正出库。<b>别急着跟仓库说「我已经领了」。</b>
+  </div>
+
+  <h3>1.3 仓库拣完货，你要点「确认收货」</h3>
+  <p>仓库拣好货以后，你的<b>首页最上面会出现一条提示</b>：「你有 N 张领料单待收货」，下面写着单号和仓库名。</p>
+  <ol class="steps">
+    <li>点这条提示（或进「库存流水」找到那张单）。</li>
+    <li>核对：单上的物料、数量，和你手上拿到的是否一致。</li>
+    <li>一致就点「<b>确认收货</b>」。<b>这一下库存才真正减掉。</b></li>
+    <li>不一致（少给了、给错了）——<b>先别点</b>，直接找仓管当面核，让他改。</li>
+  </ol>
+  <div class="warn">
+    <span class="t">如果你一直不点「确认收货」</span>
+    单子会一直停在「待收货」，库存不会减，账面数字比实际多。仓管那边可以在你同意后代你点「代确认收货」。
+    <b>不要让它一直挂着</b>，当天的事当天结。
+  </div>
+
+  <h3>1.4 单子被驳回了怎么办</h3>
+  <p>仓库如果觉得这张单有问题（数量不对、重复提交、料号选错），会驳回并写原因。你首页会出现一条橙色提醒：「你有 N 张出库单被驳回」。</p>
+  <ol class="steps">
+    <li>点开提醒，看驳回原因。</li>
+    <li>按原因改：数量错了就重新提一张正确的；选错料就重新选。被驳回的单<b>不用管它</b>，它会停在「已驳回」不再动。</li>
+    <li>如果觉得驳回没道理，直接找仓管沟通，别自己反复提交。</li>
+  </ol>
+
+  <h3>1.5 报废申请（单独一个入口，别混在领料里）</h3>
+  <p>东西坏了要报废，和「领料」是两码事，所以要单独点「报废申请」。</p>
+  <ol class="steps">
+    <li>点首页「报废申请」。</li>
+    <li>选物料、填报废数量。</li>
+    <li><b>拍照</b>：把坏掉的实物拍清楚，这是必填项，不拍交不了。</li>
+    <li><b>写原因</b>：怎么坏的、谁弄坏的、发生在哪。也必填。</li>
+    <li>提交，然后通知仓管去处理。</li>
+  </ol>
+  <div class="tip"><span class="t">为什么非要拍照</span>报废是「东西没了但要有个说法」，照片和原因是唯一凭据，也防止拿报废掩盖少货。省不掉，拍清楚。</div>
+</div>
+
+<!-- ==================== 第2章 仓管员 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 02</div>
+    <h2>仓管员（配件仓 / 成品仓）</h2>
+  </div>
+
+  <div class="idcard">
+    <div><div class="lbl">你是谁</div><div class="val">管仓库的人</div></div>
+    <div><div class="lbl">主要用</div><div class="val">手机为主 + 电脑为辅</div></div>
+    <div><div class="lbl">手机卡片</div><div class="val">入库登记、仓管工作台、库存盘点、库存流水、发起采购（配件仓）</div></div>
+    <div><div class="lbl">电脑后台</div><div class="val">6～7 项菜单</div></div>
+  </div>
+
+  <div class="tip">
+    <span class="t">一句话说清你的活</span>
+    进来的货要登记（<b>提交就加库存</b>）；要出去的单子要确认、要拣货；定期盘一次账；
+    月底跟老板对得上数。<b>你是全系统最忙、也最关键的一个岗位。</b>
+  </div>
+
+  <div class="warn">
+    <span class="t">配件仓管和成品仓管不一样</span>
+    你被分配到哪个仓，就只能看哪个仓的货：
+    <b>配件仓管</b>管零件、辅料，能发起采购（要买配件），会有「采购任务」这张卡；
+    <b>成品仓管</b>管做好的成品，<b>没有采购任务卡</b>（成品不用买），但后台多了「成品仓出库」一个菜单。
+    两边互相看不到对方的货，这是故意的，防止串仓。
+  </div>
+
+  <h3>2.1 手机上你有 6 个入口</h3>
+  <table>
+    <thead><tr><th style="width:20%">卡片</th><th style="width:44%">干什么</th><th>谁有</th></tr></thead>
+    <tr><td><b>入库登记</b></td><td>货进仓时登记数量、单价、供应商。<b>提交即入账</b></td><td>两个仓管都有</td></tr>
+    <tr><td><b>仓管工作台</b></td><td>待办总入口：确认单据、拣货、查本仓库存、全部流水</td><td>两个仓管都有</td></tr>
+    <tr><td><b>库存盘点</b></td><td>建盘点任务、录实际数量、提交审核</td><td>两个仓管都有</td></tr>
+    <tr><td><b>库存流水</b></td><td>本仓每一笔出入库</td><td>两个仓管都有</td></tr>
+    <tr><td><b>发起采购</b></td><td>发布采购任务给采购员，或自己领了去买</td><td><b>只有配件仓管</b></td></tr>
+    <tr><td><b>消息</b></td><td>待确认、待收货、待审核提醒</td><td>两个仓管都有</td></tr>
+  </table>
+
+  <h3>2.2 入库登记（最常用，也最容易出错）</h3>
+  <p>使用场景：供应商送货到、车间退回好料、成品做出来了要入成品仓。</p>
+  <ol class="steps">
+    <li>点首页「入库登记」。</li>
+    <li><b>选仓库</b>（如果你只管一个仓，会自动是那个仓）。</li>
+    <li><b>找货</b>：搜名称或规格，扫码也行。</li>
+    <li><b>如果系统里没有这个物料</b>：点「新建物料」，填名称（必填）、单位、预警库存、大类（必填）、规格、细分类、物料编号、拍张照。建完就能直接选来用。
+      <span class="small">第一次进的新货一定要建档，不然以后没法盘、没法查。</span></li>
+    <li><b>填数量</b>（入库数量）。</li>
+    <li><b>填单价（元）</b>。这一栏决定成本，<b>看不懂就找采购员要实际单价，别随手填 0</b>。填 0 会让成本被永久拉低。</li>
+    <li>看<b>小计</b>对不对（数量 × 单价，系统自动算）。</li>
+    <li><b>供应商</b>：可以直接手打，也可以点右上角从供应商档案里选。</li>
+    <li><b>备注</b>：建议写来源，例如「XX 供应商送货」「3 号线退料」。</li>
+    <li>点「<b>提交入库</b>」。</li>
+  </ol>
+  <div class="warn">
+    <span class="t">入库是「提交即入账」，没有后悔药</span>
+    点了提交，库存<b>立刻加</b>，不会等谁审批。所以：
+    数量先数清楚，单价先问清楚，再点提交。
+    <b>填错了怎么办？</b>如果是数量多填了：在「入库单」里找到这张单做「撤销」（只有未确认的能撤）。已经用掉的，只能通过盘点调回来。
+  </div>
+
+  <h3>2.3 仓管工作台：4 个数字是什么意思</h3>
+  <table>
+    <thead><tr><th style="width:16%">数字</th><th style="width:44%">意思</th><th>你要做什么</th></tr></thead>
+    <tr><td class="c"><b>待确认</b></td><td>有人刚提了单，等你点头</td><td>点进去，核对后点「<b>确认这张单</b>」</td></tr>
+    <tr><td class="c"><b>待拣货</b></td><td>你已经确认了，但货还没拣出来</td><td>去货架拣货，拣完点「<b>拣货完成</b>」</td></tr>
+    <tr><td class="c"><b>待收货</b></td><td>货拣好了，等领料员来拿</td><td>等对方点确认收货；对方不方便你可以点「<b>代确认收货</b>」</td></tr>
+    <tr><td class="c"><b>今日单据</b></td><td>今天一共处理了多少单</td><td>看工作量，不用操作</td></tr>
+  </table>
+
+  <h4>待办单据的三种操作，别点错</h4>
+  <ol class="steps">
+    <li><b>确认这张单</b>——单子是「待确认」时出现。确认前先看物料、数量对不对，不对就<b>驳回</b>（在明细里能找到驳回，需要写原因）。</li>
+    <li><b>拣货完成</b>——单子是「待拣货」时出现。你手上货已经点齐了再点。</li>
+    <li><b>代确认收货</b>——单子是「待收货」时出现。<b>只在领料员当场拿到货、但他不会用手机时用</b>，用完要跟他说一声。</li>
+  </ol>
+  <div class="key">
+    <span class="t">出库的库存，是「确认收货」那一刻才减</span>
+    你确认单据、拣货完成，库存都还不动。这是设计——防止单子开了货没拿走，账面数量先掉下去，盘点又对不上。
+  </div>
+
+  <h3>2.4 采购收料：采购员买回来的货怎么进仓</h3>
+  <p>采购员在外面买完，会在任务里填好单价、单号、拍好小票。货送到你手上时：</p>
+  <ol class="steps">
+    <li>手机上点「<b>采购任务</b>」（在工作台里，或首页「发起采购」进去）。</li>
+    <li>找到状态是「<b>待收料</b>」的那张，点开详情。</li>
+    <li>对着货<b>逐项点「到货入库」</b>，填实际到货数量。
+      <span class="small">到货可能分批，比如要 100 个先到 60 个，就先收 60，剩下 40 下次到再收。每收一次，库存就加一次。</span></li>
+    <li>全部收齐后（按钮会从「还有 N 项未到齐」变成「<b>完成收货</b>」），点「完成收货」把任务办结。</li>
+    <li>货不对（数量少、型号错、质量差）：点「<b>退回给采购员</b>」，并写清原因。</li>
+  </ol>
+  <div class="warn">
+    <span class="t">采购单不会自动加库存</span>
+    采购员点「提交采购信息」，库存<b>一点都不会加</b>——那只是记录「买到了、多少钱」。
+    真正进仓要靠你这里点「到货入库」。<b>忘了收，账面就是缺货。</b>
+  </div>
+
+  <h3>2.5 库存盘点：怎么盘、盘完谁审</h3>
+  <p>什么时候盘：月底、老板要求、或者发现账面对不上。</p>
+  <ol class="steps">
+    <li>点首页「库存盘点」→ 右下角「<b>＋ 新建盘点任务</b>」。</li>
+    <li>选<b>盘点类型</b>（全盘 / 抽盘）、<b>盘点仓库</b>。</li>
+    <li>选<b>盘点范围</b>：全盘就是整个仓都盘；只盘几样就点「选择物料」勾出来。</li>
+    <li>建好后点开这张盘点单，进「<b>盘点录入</b>」。</li>
+    <li>每样货都有「账面数」和「实际数量」两栏。<b>你只填「实际数量」</b>——去货架数，数多少填多少。</li>
+    <li>偷懒小技巧：大部分货都对得上时，先点「<b>其余按账面数填</b>」，再单独改有差异的那几行。</li>
+    <li>没盘到的可以<b>留空</b>（留空的不会被提交，可以下次补盘）。</li>
+    <li>看着「差异」那一列（正数是多出来，负数是少了），确认没问题后点提交。</li>
+  </ol>
+  <div class="key">
+    <span class="t">盘点不是你说了算</span>
+    提交后状态是「<b>待审核</b>」。要等<b>厂长或管理员</b>在电脑后台点「审核通过并调账」，账面数才会真的改成你数的数。
+    他们也可能「退回重盘」，让你重新数一遍。
+    <b>所以盘完要提醒他们去审</b>，不然白盘了。
+  </div>
+
+  <h3>2.6 电脑后台：你能看到这些菜单</h3>
+  <table>
+    <thead><tr><th style="width:26%">菜单</th><th>能干什么</th><th class="c" style="width:14%">配件仓管</th><th class="c" style="width:14%">成品仓管</th></tr></thead>
+    <tr><td>数据看板</td><td>本仓库存概览、今日单据</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+    <tr><td>统计分析 › 出入库统计</td><td>按时间看进出数量和金额</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+    <tr><td>统计分析 › 月结表</td><td>每月期初、入库、出库、期末</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+    <tr><td>物料管理 › 配件仓物料</td><td>查/改配件资料、看库存、导出表格</td><td class="c yes">有</td><td class="c no">—</td></tr>
+    <tr><td>物料管理 › 成品仓物料</td><td>查/改成品资料、看库存、导出表格</td><td class="c no">—</td><td class="c yes">有</td></tr>
+    <tr><td>单据管理 › 出库单</td><td>查所有领料/销售单，看状态</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+    <tr><td>单据管理 › 入库单</td><td>查所有入库单，可以撤销没确认的</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+    <tr><td>单据管理 › 新建入库单</td><td>在电脑上批量录入库（货多时比手机快）</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+    <tr><td>单据管理 › 成品仓出库</td><td>发起成品出库（销售/领用）</td><td class="c no">—</td><td class="c yes">有</td></tr>
+    <tr><td>采购任务</td><td>发布/跟踪采购任务</td><td class="c yes">有</td><td class="c no">—</td></tr>
+    <tr><td>消息中心</td><td>系统通知</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+    <tr><td>盘点管理</td><td>查盘点单、导出盘点表</td><td class="c yes">有</td><td class="c yes">有</td></tr>
+  </table>
+  <div class="small">配件仓管看不到「成品仓物料」「成品仓出库」，成品仓管看不到「配件仓物料」「采购任务」，按仓库分好的；<b>「用户管理」「系统设置」「操作日志」「数据大屏」</b>是管理员和老板的，你也看不到。</div>
+
+  <h3>2.7 电脑上怎么新建入库单（货多的时候用）</h3>
+  <ol class="steps">
+    <li>左边点「单据管理 › 新建入库单」。</li>
+    <li>选仓库、选供应商（可以手打）、填单号（没单号就留空或问管理员）。</li>
+    <li>一行一行加物料：选物料、填数量、填单价，<b>加几行都行</b>，最后看合计金额。</li>
+    <li>保存 → 提交。同样是<b>提交即入账</b>。</li>
+  </ol>
+
+  <h3>2.8 仓管的三条纪律</h3>
+  <div class="key">
+    <span class="t">这三条违反一次，账就要花好几天修</span>
+    <p style="margin:3px 0"><b>一、单子别压着。</b>每天下班前把「待确认」「待拣货」清到 0。压着会让库存一直不准，月底盘点全是差异，最后还是你自己加班。</p>
+    <p style="margin:3px 0"><b>二、单价问清楚，不要填 0。</b>入库单价是成本的唯一来源。填了 0 会把成本拉低，老板看到的毛利就是假的，而且改不回来。</p>
+    <p style="margin:3px 0"><b>三、别自己改库存数字。</b>物料资料能改名称、规格、单位，但数量不是直接填的。对不上就走<b>盘点</b>，让厂长/管理员审核后调账，这样才有记录可查。</p>
+  </div>
+</div>
+
+<!-- ==================== 第3章 采购员 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 03</div>
+    <h2>采购员</h2>
+  </div>
+
+  <div class="idcard">
+    <div><div class="lbl">你是谁</div><div class="val">负责买货的人</div></div>
+    <div><div class="lbl">主要用</div><div class="val">手机小程序</div></div>
+    <div><div class="lbl">手机卡片</div><div class="val">采购任务、库存流水</div></div>
+    <div><div class="lbl">电脑后台</div><div class="val">4 项菜单</div></div>
+  </div>
+
+  <div class="tip">
+    <span class="t">一句话说清你的活</span>
+    仓管发任务 → 你领取 → 去买 → 回来把<b>每样货的真实单价、发票或单号、小票照片</b>填进系统 → 仓库收料。<b>你只管买，不碰库存。</b>
+  </div>
+
+  <h3>3.1 采购任务：完整流程</h3>
+  <ol class="steps">
+    <li>手机点「<b>采购任务</b>」（登录后默认就落在这个页面，因为这是你的主场）。</li>
+    <li>看「<b>待领取</b>」这一栏。<b>卡片右上角有数字，就是有新任务</b>。</li>
+    <li>点开看明细：要买什么、多少、哪个仓要的、有没有参考价。</li>
+    <li>点「<b>领取任务</b>」。领了之后单子归你，状态变「采购中」，别人就抢不走了。</li>
+    <li>去买货。</li>
+    <li>买回来后在详情页点「<b>展开录入表单</b>」，<b>每样货填一行</b>：实际单价、实际数量、发票号/单据号。</li>
+    <li><b>上传小票或发票照片</b>——点上传框，拍照上传。这是报销和对账的凭据，别跳过。</li>
+    <li>点「<b>提交采购信息</b>」。状态变「<b>待收料</b>」。</li>
+    <li>把货交给仓管。仓管收完货，状态变「<b>已入库</b>」，这单就结束了。</li>
+  </ol>
+
+  <div class="warn">
+    <span class="t">你提交以后，库存是 0 增长</span>
+    很多人以为「我买了 100 个，系统里就有 100 个了」——<b>没有</b>。你提交的只是「买了、多少钱」。
+    库存要等仓管点「到货入库」才加。<b>所以货一定要交到仓管手上</b>，别往仓库门口一放就走。
+  </div>
+
+  <h3>3.2 状态怎么看</h3>
+  <table>
+    <thead><tr><th style="width:20%">状态</th><th style="width:34%">意思</th><th>该谁动手</th></tr></thead>
+    <tr><td><b>待领取</b></td><td>仓管刚发的任务，还没人接</td><td><b>你</b>——去领取</td></tr>
+    <tr><td><b>采购中</b></td><td>你已经领取，正在买</td><td><b>你</b>——买完填信息</td></tr>
+    <tr><td><b>待收料</b></td><td>你已提交采购信息，货还没到仓</td><td><b>仓管</b>——收料入库</td></tr>
+    <tr><td><b>收货中</b></td><td>仓管在收，可能分批到</td><td>仓管</td></tr>
+    <tr><td><b>已入库</b></td><td>全部收完，办结了</td><td>—（结束了）</td></tr>
+    <tr><td><b>已取消</b></td><td>仓管取消了这张任务</td><td>—（不用管）</td></tr>
+  </table>
+
+  <h3>3.3 被退回给采购员怎么办</h3>
+  <p>仓管发现货不对（数量少、型号错、质量差），会在任务里点「退回给采购员」。你会收到消息。</p>
+  <ol class="steps">
+    <li>进「采购任务」找到这张单，看退回原因。</li>
+    <li>补货 / 换货 / 找供应商。</li>
+    <li>回来重新展开录入表单，改数量和单价，重新提交。</li>
+  </ol>
+
+  <h3>3.4 电脑后台你能做什么</h3>
+  <table>
+    <thead><tr><th style="width:30%">菜单</th><th>能干什么</th></tr></thead>
+    <tr><td>统计分析 › 出入库统计</td><td>看某段时间进了多少、出了多少</td></tr>
+    <tr><td>单据管理 › 出库单</td><td>查所有出库单（只看，不能改）</td></tr>
+    <tr><td>单据管理 › 入库单</td><td>查所有入库单，核对「我买的这批到底入了多少、单价多少」</td></tr>
+    <tr><td>采购任务</td><td>和手机上同一个数据，电脑上看得更全，能导出</td></tr>
+    <tr><td>消息中心</td><td>通知</td></tr>
+  </table>
+  <p class="small">你在后台没有「新建入库单」「物料管理」的入口——入库是仓管的活，你只负责把单价和票据录准。</p>
+
+  <div class="tip">
+    <span class="t">对账小技巧</span>
+    月底想确认「这个月我买的货有没有全部入账」，用电脑后台开「单据管理 › 入库单」，按时间筛这个月，导出 CSV，再对着你的采购任务列表核一遍。<b>两边数量对不上，就是有货没交到仓管手上。</b>
+  </div>
+</div>
+
+<!-- ==================== 第4章 厂长 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 04</div>
+    <h2>厂长</h2>
+  </div>
+
+  <div class="idcard">
+    <div><div class="lbl">你是谁</div><div class="val">管生产、管两个仓的人</div></div>
+    <div><div class="lbl">主要用</div><div class="val">手机看数 + 电脑审单</div></div>
+    <div><div class="lbl">手机卡片</div><div class="val">经营看板、成品仓出库、库存盘点、库存流水</div></div>
+    <div><div class="lbl">电脑后台</div><div class="val">7 项菜单</div></div>
+  </div>
+
+  <div class="tip">
+    <span class="t">一句话说清你的活</span>
+    看两个仓的库存和金额；成品要发货由你发起出库；仓管盘完的账<b>由你审核</b>，审完账面才改。
+  </div>
+
+  <h3>4.1 手机上你有 4 个入口</h3>
+  <table>
+    <thead><tr><th style="width:22%">卡片</th><th>干什么</th></tr></thead>
+    <tr><td><b>经营看板</b></td><td>两个仓的库存、金额、单据统计、库存预警</td></tr>
+    <tr><td><b>成品仓出库</b></td><td>发起成品出库（销售发货 / 领用）</td></tr>
+    <tr><td><b>库存盘点</b></td><td>看盘点任务、也可以自己建盘点</td></tr>
+    <tr><td><b>库存流水</b></td><td>每笔出入库都能追到人</td></tr>
+  </table>
+  <p class="small">「发起采购」这张卡你也有（两个仓都能管，所以能发）。成品不需要采购的话就不用管它。</p>
+
+  <h3>4.2 发起成品仓出库：完整流程</h3>
+  <p>客户要货、或者成品要调到别处，由你发起。</p>
+  <ol class="steps">
+    <li>点首页「<b>成品仓出库</b>」（橙色那张卡）。</li>
+    <li><b>仓库已经锁死在成品仓</b>，不用选，也选不了——这是为了防止发错仓。</li>
+    <li>搜物料、加数量。</li>
+    <li>选出库类型：卖出去选「<b>销售</b>」，内部用选「<b>领用</b>」。</li>
+    <li>填备注（比如客户名、订单号），点提交。</li>
+    <li>提交后<b>由成品仓管拣货</b>。拣完你会收到消息。</li>
+    <li>进消息或单据详情，点「<b>确认收货</b>」——<b>这一下才扣库存</b>。</li>
+  </ol>
+  <div class="key">
+    <span class="t">你负责开单和确认，不负责搬货</span>
+    开单、确认是你的；拣货是仓管的。两边配合，单子才走得完。
+    你一直不确认，库存就一直不减，月底账面会偏大。
+  </div>
+
+  <h3>4.3 审核盘点（你最重要的一个动作）</h3>
+  <p>仓管盘完提交后，状态是「待审核」，会推消息给你和管理员。</p>
+  <ol class="steps">
+    <li>电脑后台左边点「<b>盘点管理</b>」。</li>
+    <li>筛选状态「待审核」，点开要看的那张。</li>
+    <li>看明细：每样货的账面数、实盘数、差异。<b>差异大的几项要问清楚原因</b>（是漏记入库？还是丢了？）。</li>
+    <li>确认没问题 → 点「<b>审核通过并调账</b>」。<b>点完这一下，账面数才改成实盘数。</b></li>
+    <li>有问题 → 点「<b>退回重盘</b>」，写原因，让仓管重数。</li>
+  </ol>
+  <div class="warn">
+    <span class="t">「审核通过并调账」是不可逆的</span>
+    点下去库存就按实盘数改了。所以<b>别顺手点</b>——先看差异清单，特别是负数（少了）的项，逐条问过再点。
+  </div>
+
+  <h3>4.4 电脑后台：你的 7 项菜单</h3>
+  <table>
+    <thead><tr><th style="width:30%">菜单</th><th>能干什么</th></tr></thead>
+    <tr><td>数据看板</td><td>今天进了多少、出了多少、库存金额、预警</td></tr>
+    <tr><td>统计分析 › 出入库统计</td><td>按时间段看数量金额走势</td></tr>
+    <tr><td>统计分析 › 月结表</td><td>每月期初 / 入库 / 出库 / 期末，对账用</td></tr>
+    <tr><td>物料管理（配件仓 / 成品仓）</td><td>查改物料资料、看两个仓的库存和金额、导出</td></tr>
+    <tr><td>单据管理 › 出库单</td><td>查所有出库单、看状态、看谁办的</td></tr>
+    <tr><td>单据管理 › 成品仓出库</td><td>在电脑上发起成品出库</td></tr>
+    <tr><td>采购任务</td><td>看采购进度、谁领了、买了多少、单价</td></tr>
+    <tr><td>盘点管理</td><td>审核盘点、退回重盘、导出盘点表</td></tr>
+    <tr><td>消息中心</td><td>待审提醒</td></tr>
+  </table>
+  <div class="warn">
+    <span class="t">你没有这些</span>
+    <b>入库单</b>（入库是仓管的事，你只查不了、也建不了）、
+    <b>物料排行 / 人员绩效 / 数据大屏</b>（老板和管理员才有）、
+    <b>用户管理 / 权限管理 / 系统设置 / 操作日志</b>（管理员才有）、
+    <b>批量导入</b>（管理员才有）。
+  </div>
+</div>
+
+<!-- ==================== 第5章 老板 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 05</div>
+    <h2>老板</h2>
+  </div>
+
+  <div class="idcard">
+    <div><div class="lbl">你是谁</div><div class="val">看全局的人</div></div>
+    <div><div class="lbl">主要用</div><div class="val">手机上瞄一眼，电脑上看细账</div></div>
+    <div><div class="lbl">手机卡片</div><div class="val">老板看板、库存流水</div></div>
+    <div><div class="lbl">电脑后台</div><div class="val">11 项菜单</div></div>
+  </div>
+
+  <div class="tip">
+    <span class="t">一句话说清你的定位</span>
+    <b>只看，不改。</b>所有数据你都能看（包括金额、成本、每个人的工作量），但改数据、审单、开单这些动作不收在你手里——
+    这是故意的，防止你自己动手把账弄乱，也保证单据都有经办人。
+  </div>
+
+  <h3>5.1 手机上你能看什么</h3>
+  <table>
+    <thead><tr><th style="width:22%">入口</th><th>看什么</th></tr></thead>
+    <tr><td><b>老板看板</b></td><td>两个仓库存总量、库存金额、今日进出、库存预警（哪些货快没了）、单据趋势</td></tr>
+    <tr><td><b>库存流水</b></td><td>每一笔进出：时间、物料、数量、谁办的、什么类型</td></tr>
+    <tr><td><b>消息</b></td><td>系统通知</td></tr>
+  </table>
+  <p class="small">看板里还能点进去看「库存台账」「单据流水」「库存预警」三个子页面。</p>
+
+  <h3>5.2 电脑后台：11 项菜单</h3>
+  <table>
+    <thead><tr><th style="width:26%">菜单</th><th>能干什么</th></tr></thead>
+    <tr><td>数据看板</td><td>总览：库存金额、今日单据、预警数量</td></tr>
+    <tr><td>数据大屏</td><td>会议室/大屏展示用的全屏看板</td></tr>
+    <tr><td>统计分析 › 出入库统计</td><td>按时间段看进出数量和金额</td></tr>
+    <tr><td>统计分析 › 月结表</td><td>每月期初 / 入库 / 出库 / 期末，<b>对账最常用</b></td></tr>
+    <tr><td>统计分析 › 物料排行</td><td>哪些货用量最大、占钱最多</td></tr>
+    <tr><td>统计分析 › 人员绩效</td><td>谁做了多少单、处理量多少</td></tr>
+    <tr><td>用户管理</td><td><b>审批新员工、改岗位、改能管哪个仓、重置密码</b></td></tr>
+    <tr><td>权限管理</td><td>看每个岗位能进哪些页面</td></tr>
+    <tr><td>物料管理（配件仓 / 成品仓）</td><td>查物料、看库存和金额、导出表格</td></tr>
+    <tr><td>单据管理（出库单 / 入库单）</td><td>查所有单据、看状态和经办人</td></tr>
+    <tr><td>采购任务</td><td>采购进度、谁在买、买了多少钱</td></tr>
+    <tr><td>盘点管理</td><td>看盘点单和差异（<b>审核是厂长的活</b>，你只看看）</td></tr>
+    <tr><td>操作日志</td><td><b>谁在什么时候改了什么，都在这里</b></td></tr>
+    <tr><td>消息中心</td><td>通知</td></tr>
+  </table>
+
+  <h3>5.3 新员工来了，怎么给他开账号（最常用）</h3>
+  <ol class="steps">
+    <li>让员工先用微信扫码登录小程序一次，他会停在「等待审批」。</li>
+    <li>你打开电脑后台「<b>用户管理</b>」，会看到一条待审批记录（有微信头像、昵称）。</li>
+    <li>点开他，设置：<b>真实姓名</b>、<b>岗位</b>（可多选，比如同时是厂长和仓管）、<b>能管哪个仓</b>。</li>
+    <li>保存。他退出小程序再进，首页就有对应的卡片了。</li>
+    <li>如果他还要用电脑后台：在同一条记录里补<b>账号</b>（建议 <code>sl</code>+岗位拼音）和<b>初始密码</b>，把账号密码当面给他。</li>
+  </ol>
+  <div class="warn">
+    <span class="t">岗位和仓库两个都要设</span>
+    只设「仓管」不设仓库，他可能看不到货；只设仓库不设岗位，他连菜单都没有。<b>两个都设才对。</b>
+  </div>
+
+  <h3>5.4 月底对账：三步</h3>
+  <ol class="steps">
+    <li>「统计分析 › 月结表」选月份，看期初、本期入库、本期出库、期末四个数。期末 = 期初 + 入库 − 出库，对不上就是有单没结。</li>
+    <li>「单据管理」按月份筛，看有没有一直挂在「待确认 / 待拣货 / 待收货」的单——<b>这些就是让账对不上的元凶</b>。</li>
+    <li>「操作日志」查谁在什么时候改过什么。发现异常数据，先查日志，再找人。</li>
+  </ol>
+</div>
+
+<!-- ==================== 第6章 管理员 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 06</div>
+    <h2>管理员</h2>
+  </div>
+
+  <div class="idcard">
+    <div><div class="lbl">你是谁</div><div class="val">系统的总管</div></div>
+    <div><div class="lbl">主要用</div><div class="val">电脑后台</div></div>
+    <div><div class="lbl">手机卡片</div><div class="val">和仓管一样（能管两个仓）</div></div>
+    <div><div class="lbl">电脑后台</div><div class="val">全部 12 项菜单</div></div>
+  </div>
+
+  <div class="tip">
+    <span class="t">一句话说清你的活</span>
+    所有功能你都有。别人干不了的（作废已确认的单、批量导入、系统设置、期初建账）只有你能干。
+    <b>权限越大越要留痕</b>，你做的每件事操作日志里都有。
+  </div>
+
+  <h3>6.1 只有你能做的 5 件事</h3>
+  <table>
+    <thead><tr><th style="width:28%">能力</th><th>在哪</th><th>什么时候用</th></tr></thead>
+    <tr><td><b>作废已确认的单据</b></td><td>出库单 / 入库单详情</td><td>单子已经确认过，但确实错了、要冲掉</td></tr>
+    <tr><td><b>批量导入物料</b></td><td>物料管理 › 批量导入</td><td>一次要建几十上百个物料时（用 Excel 模板）</td></tr>
+    <tr><td><b>系统设置</b></td><td>系统设置</td><td>改仓库、角色权限、<b>期初建账开关</b></td></tr>
+    <tr><td><b>数据大屏</b></td><td>数据大屏</td><td>展示用</td></tr>
+    <tr><td><b>趋势统计</b></td><td>数据看板里的趋势图</td><td>只有你能看这一段</td></tr>
+  </table>
+
+  <h3>6.2 首次上线：期初建账（只在刚上线时用一次）</h3>
+  <p>系统刚上线时，仓库里本来就有一批货，但系统里是 0。这些「老库存」要填进去，叫期初建账。</p>
+  <ol class="steps">
+    <li>「系统设置」→「<b>期初建账</b>」标签页 → <b>打开开关</b>。</li>
+    <li>去「物料管理」→ 点某个物料「编辑」，会多出三格：<b>期初数量、期初金额、折算单价</b>。</li>
+    <li>照着实际库存一点一点填，<b>只填数量金额，不要动其他字段</b>。单价是自动算的（金额 ÷ 数量）。</li>
+    <li>全部填完，回「系统设置」把<b>开关关掉</b>。</li>
+  </ol>
+  <div class="warn">
+    <span class="t">关掉开关才是真的关掉</span>
+    关掉后，这些字段在接口层面就直接拒绝了（不只是界面上看不见），谁都改不了。
+    <b>填的过程中不要关</b>，填完一次性关。以后要调整库存，走盘点，不要再开这个开关。
+  </div>
+
+  <h3>6.3 员工忘记密码怎么办</h3>
+  <ol class="steps">
+    <li>「用户管理」找到这个人。</li>
+    <li>点「重置密码」，设一个新的临时密码，<b>当面告诉他</b>。</li>
+    <li>提醒他登录后马上自己改掉。</li>
+  </ol>
+  <p class="small">手机微信登录的人不需要密码，他们忘不了；只有用电脑后台的人才需要账号密码。</p>
+
+  <h3>6.4 系统设置里有什么</h3>
+  <table>
+    <thead><tr><th style="width:28%">标签页</th><th>内容</th></tr></thead>
+    <tr><td>仓库管理</td><td>两个仓的资料（名称、编号）。<b>不要随便改编号</b>，很多地方按编号认仓库</td></tr>
+    <tr><td>角色与权限</td><td>看每个岗位能进哪些页面、能调哪些接口</td></tr>
+    <tr><td>期初建账</td><td>上面说的开关，平时必须关着</td></tr>
+  </table>
+
+  <h3>6.5 出问题了先看哪里</h3>
+  <p><b>数字不对</b>：先去「操作日志」查谁改了什么 → 再看「单据管理」有没有一直卡住的单 → 最后才考虑盘点。<br>
+  <b>有人看不到功能</b>：「用户管理」看他岗位和仓库配了没 → 再对照「权限管理」看这个岗位本来有没有这一页。<br>
+  <b>页面打不开或报错</b>：先刷新；还不行联系开发。<b>不要自己去改数据库</b>，你是最后一环，别把问题搞大。</p>
+
+  <h3>6.6 建议的日常检查（照着看就行）</h3>
+  <p class="small">这一节不是必须做，但坚持做能避免 80% 的「月底对不上账」。</p>
+  <table>
+    <thead>
+    <tr><th style="width:12%">频率</th><th style="width:26%">看哪里</th><th style="width:34%">看什么</th><th>发现问题怎么办</th></tr>
+    </thead>
+    <tr><td><b>每天</b></td><td>用户管理</td><td>有没有「待审批」的新注册</td><td>当天审批完，别让人一直卡在等待页</td></tr>
+    <tr><td><b>每天</b></td><td>单据管理 › 出库单</td><td>筛「待确认 / 待拣货」超过 2 天的单</td><td>直接找对应仓管，问为什么没处理</td></tr>
+    <tr><td><b>每天</b></td><td>消息中心</td><td>有没有待审的盘点单</td><td>催厂长去审；没人审账就一直不改</td></tr>
+    <tr><td><b>每周</b></td><td>统计分析 › 出入库统计</td><td>这周出入量有没有明显异常（突然翻倍或归零）</td><td>查操作日志，看是哪张单造成的</td></tr>
+    <tr><td><b>每周</b></td><td>物料管理 › 库存预警</td><td>哪些料快用完了</td><td>让仓管发起采购任务</td></tr>
+    <tr><td><b>每周</b></td><td>操作日志</td><td>有没有人频繁作废、批量改价</td><td>当面问清楚，必要时收回权限</td></tr>
+    <tr><td><b>每月</b></td><td>统计分析 › 月结表</td><td>期末 = 期初 + 入库 − 出库，对不对得上</td><td>对不上就查卡住的单，最后才盘点</td></tr>
+    <tr><td><b>每月</b></td><td>—</td><td>数据有没有备份</td><td>这是技术侧的事，让开发确认一次，自己别动</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 第7章 常见问题 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">CHAPTER 07</div>
+    <h2>常见问题 15 问</h2>
+  </div>
+
+  <h4>1. 登录后显示「等待管理员审批」，什么都点不了</h4>
+  <p>正常。你的微信已经注册上了，但岗位还没配。找管理员在电脑「用户管理」里给你设岗位和仓库，然后你退出小程序重新进一次。</p>
+
+  <h4>2. 我手机上怎么没有「入库登记」？</h4>
+  <p>说明你的岗位不是仓管。首页卡片是按岗位发的，不是坏了。真需要这个功能，让管理员给你加岗位。</p>
+
+  <h4>3. 我明明是仓管，为什么看不到金额？</h4>
+  <p>故意的。纯仓管只看数量、不看金额和成本。老板、厂长、采购员、管理员能看。要能看金额，得由管理员给你加相应岗位。</p>
+
+  <h4>4. 电脑后台登不进去，说我账号密码错</h4>
+  <p>先确认三件事：账号是不是管理员给的那个（注意大小写，一般全小写）；密码有没有改过；是不是把微信登录当成后台登录了。都不对就找管理员重置。</p>
+
+  <h4>5. 手机上做的单，电脑上没看到</h4>
+  <p>电脑页面没刷新。按 F5 刷新一下，或点一下页面上「搜索」按钮重新查。数据是同一份，不会丢。</p>
+
+  <h4>6. 我的领料单交了很久，仓库一直没动</h4>
+  <p>状态应该是「待确认」。直接找仓管，让他点「确认这张单」。</p>
+
+  <h4>7. 仓库说已经拣好了，我这边库存怎么还没减</h4>
+  <p>因为你还没点「确认收货」。首页会有提示条「你有 N 张领料单待收货」，点进去确认。<b>这一步才扣库存。</b></p>
+
+  <h4>8. 单子填错了数量，能改吗</h4>
+  <table>
+    <thead><tr><th style="width:26%">单子现在的状态</th><th>怎么改</th></tr></thead>
+    <tr><td>待确认</td><td>让仓管<b>驳回</b>，你重新提一张正确的</td></tr>
+    <tr><td>待拣货 / 待收货</td><td>找仓管，让他驳回或作废</td></tr>
+    <tr><td>已收货（已扣库存）</td><td>只有<b>管理员</b>能作废。库存已经动了，作废后会回补</td></tr>
+    <tr><td>入库单（已入账）</td><td>找仓管「撤销」；已经用掉的只能靠盘点调回来</td></tr>
+  </table>
+
+  <h4>9. 我在入库时单价填了 0，会怎样</h4>
+  <p>这批货的成本会被算成 0，而且<b>改不回来</b>（成本是用加权平均算的，0 会永久把平均值拉低）。发现填错了马上找管理员，看能不能作废重开。</p>
+
+  <h4>10. 库存数量和实际对不上</h4>
+  <p>不要直接改数字（也改不了）。正确做法：仓管发起<b>盘点</b>，数出实际数量提交，厂长或管理员审核通过后，账面自动改成实盘数，而且有完整记录。</p>
+
+  <h4>11. 采购员说货买了，为什么库存还是 0</h4>
+  <p>采购单不会自动加库存。要仓管在「采购任务 → 详情」里逐项点「到货入库」，库存才加。<b>货要交到仓管手上。</b></p>
+
+  <h4>12. 盘点提交了，什么时候生效</h4>
+  <p>要等厂长或管理员审。他们在电脑「盘点管理」里点「审核通过并调账」之后才生效。提醒他们去审。</p>
+
+  <h4>13. 报废为什么非要拍照</h4>
+  <p>报废是「东西没了但要有个说法」。照片和原因是唯一凭据，也防止用报废掩盖少货。这条省不掉。</p>
+
+  <h4>14. 手机上没有「新建物料」，但来了个新货怎么办</h4>
+  <p>进「入库登记」，搜不到这个物料时点「新建物料」，填名称、大类（这两个必填），其他能填就填，然后就能直接入库了。</p>
+
+  <h4>15. 我想知道谁改过一条数据</h4>
+  <p>老板和管理员可以在电脑「操作日志」里查：时间、谁、做了什么操作、改了什么。仓管和采购看不到这一页，需要的话请他们帮查。</p>
+
+  <h3>手册里没写到的，找谁</h3>
+  <table>
+    <thead>
+    <tr><th style="width:36%">遇到的情况</th><th>先找谁</th></tr>
+    </thead>
+    <tr><td>卡片 / 菜单看不到、账号密码忘了、新员工要开通</td><td><b>管理员</b>（用户管理里改）</td></tr>
+    <tr><td>单据卡住不动（状态一直不变）</td><td>看附录的状态表，找<b>该谁动手</b>的那个人</td></tr>
+    <tr><td>库存数量和实际对不上</td><td>先找<b>仓管</b>核对，确认要改就发起<b>盘点</b></td></tr>
+    <tr><td>金额、单价填错了</td><td><b>管理员</b>（能不能改要看单子状态，见问题 8）</td></tr>
+    <tr><td>页面打不开、一直转圈、报红字</td><td>先刷新一次；还不行<b>联系开发</b>，把截图发过去</td></tr>
+  </table>
+  <div class="tip">
+    <span class="t">两条不要做</span>
+    一、<b>不要自己在系统里试来试去</b>想「试出正确做法」——单据一旦提交就会动库存，试错成本很高。<br>
+    二、<b>不要让别人替你点确认</b>。谁的货谁确认，这是以后查账的唯一依据。
+  </div>
+</div>
+
+<!-- ==================== 附录 ==================== -->
+<div class="chapter">
+  <div class="ch-head">
+    <div class="no">APPENDIX</div>
+    <h2>附录：单据状态对照表</h2>
+  </div>
+
+  <p class="small">看到单据卡在某个状态，对照这张表就知道该谁动手。全系统最常出现的「卡住」都在这里。</p>
+
+  <h3>A. 出库单 / 领料单</h3>
+  <table>
+    <thead><tr><th style="width:18%">状态</th><th style="width:38%">意思</th><th style="width:20%">该谁动手</th><th class="c">库存动了没</th></tr></thead>
+    <tr><td><b>待确认</b></td><td>领料员提交了，仓库还没受理</td><td>仓管</td><td class="c no">没动</td></tr>
+    <tr><td><b>待拣货</b></td><td>仓管已确认，货还没拣出来</td><td>仓管</td><td class="c no">没动</td></tr>
+    <tr><td><b>待收货</b></td><td>货拣好了，等领料员拿走</td><td>领料员（或仓管代确认）</td><td class="c no">没动</td></tr>
+    <tr><td><b>已确认 / 已完成</b></td><td>领料员点了确认收货，货已出库</td><td>—</td><td class="c yes">已扣减</td></tr>
+    <tr><td><b>已驳回</b></td><td>仓管认为有问题，退回了</td><td>领料员重新提</td><td class="c no">没动</td></tr>
+    <tr><td><b>已作废</b></td><td>管理员作废了</td><td>—</td><td class="c">回补</td></tr>
+  </table>
+
+  <h3>B. 入库单</h3>
+  <table>
+    <thead><tr><th style="width:18%">状态</th><th style="width:38%">意思</th><th style="width:20%">该谁动手</th><th class="c">库存动了没</th></tr></thead>
+    <tr><td><b>已入库</b></td><td>提交成功了。入库是「提交即入账」</td><td>—（已经生效）</td><td class="c yes">已增加</td></tr>
+    <tr><td><b>已撤销</b></td><td>发现填错，撤掉了</td><td>—</td><td class="c">已回退</td></tr>
+  </table>
+  <div class="tip">
+    <span class="t">入库没有「待确认」</span>
+    入库单提交就直接加库存，不会挂在中间状态。所以入库这一步要当场核对数量和单价。
+  </div>
+
+  <h3>C. 采购任务</h3>
+  <table>
+    <thead><tr><th style="width:18%">状态</th><th style="width:42%">意思</th><th>该谁动手</th></tr></thead>
+    <tr><td><b>待领取</b></td><td>仓管发了任务，还没人接</td><td>采购员</td></tr>
+    <tr><td><b>采购中</b></td><td>采购员已领取，正在买</td><td>采购员</td></tr>
+    <tr><td><b>待收料</b></td><td>采购员已填单价票据，货还没进仓</td><td>仓管（收料入库）</td></tr>
+    <tr><td><b>收货中</b></td><td>仓管在收，可能分批到货</td><td>仓管</td></tr>
+    <tr><td><b>已入库</b></td><td>全部收齐，办结</td><td>—</td></tr>
+    <tr><td><b>已取消</b></td><td>仓管取消了这个任务</td><td>—</td></tr>
+  </table>
+
+  <h3>D. 盘点单</h3>
+  <table>
+    <thead><tr><th style="width:18%">状态</th><th style="width:42%">意思</th><th>该谁动手</th></tr></thead>
+    <tr><td><b>待开始</b></td><td>建好了，还没录入</td><td>仓管</td></tr>
+    <tr><td><b>盘点中</b></td><td>开始录数了，还没提交</td><td>仓管</td></tr>
+    <tr><td><b>待审核</b></td><td>仓管提交了，等审</td><td>厂长 / 管理员</td></tr>
+    <tr><td><b>已完成</b></td><td>审过了，账面已调成实盘数</td><td>—</td></tr>
+  </table>
+  <div class="key">
+    <span class="t">盘点最容易烂尾的地方</span>
+    卡在「待审核」。仓管盘完以为结束了，厂长没看到消息，账面就一直没改。
+    <b>规矩：仓管提交后当面或电话通知厂长；厂长每天看一眼「盘点管理」的待审核。</b>
+  </div>
+
+  <h3>E. 六个岗位一张速查表</h3>
+  <table>
+    <thead><tr>
+      <th style="width:14%">岗位</th><th style="width:30%">手机主要功能</th><th style="width:32%">电脑主要功能</th><th>看得到金额</th>
+    </tr></thead>
+    <tr>
+      <td><b>领料员</b></td>
+      <td>领料出库、报废申请、库存流水、确认收货</td>
+      <td>只有消息中心</td>
+      <td class="c no">不可见</td>
+    </tr>
+    <tr>
+      <td><b>仓管员</b></td>
+      <td>入库登记、仓管工作台（确认/拣货/收货）、盘点、本仓库存、发起采购（配件）</td>
+      <td>数据看板、物料、入库单、出库单、成品仓出库（成品）、采购任务（配件）、盘点、统计</td>
+      <td class="c no">不可见</td>
+    </tr>
+    <tr>
+      <td><b>采购员</b></td>
+      <td>采购任务（领取、录单价票据）、库存流水</td>
+      <td>采购任务、入库单、出库单、出入库统计</td>
+      <td class="c yes">可见</td>
+    </tr>
+    <tr>
+      <td><b>厂长</b></td>
+      <td>经营看板、成品仓出库、盘点、库存流水</td>
+      <td>数据看板、出库单、成品仓出库、盘点管理（<b>审核</b>）、物料、月结</td>
+      <td class="c yes">可见</td>
+    </tr>
+    <tr>
+      <td><b>老板</b></td>
+      <td>老板看板、库存流水</td>
+      <td>全部查看类 + 用户管理 + 权限 + 操作日志</td>
+      <td class="c yes">可见</td>
+    </tr>
+    <tr>
+      <td><b>管理员</b></td>
+      <td>同仓管（两仓都能管）</td>
+      <td>全部 12 项，含系统设置、批量导入、作废单据</td>
+      <td class="c yes">可见</td>
+    </tr>
+  </table>
+
+  <p class="small" style="margin-top:18px;border-top:1px solid #eaecef;padding-top:8px">
+    本手册根据 2026 年 10 月 20 日系统实际功能整理。系统更新后如有出入，以实际界面为准，并请通知开发更新本手册。
+  </p>
+</div>
+
+</body>
+</html>
