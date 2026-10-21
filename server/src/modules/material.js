@@ -419,6 +419,22 @@ async function distinctColumn(ctx, column, requestedWarehouse) {
 }
 
 /**
+ * 成品仓「车间」的固定候选（库里已有的 ∪ 这份列表）
+ * ------------------------------------------------------------
+ * 车间 = `materials.sub_category`，系统**没有独立字典表**，下拉一直是「从现有物料里 DISTINCT」得来的。
+ * 于是有个绕不过去的毛病：**一个还没有任何物料的新车间，筛选和建档时根本选不到** ——
+ * 只能先随便建一条物料把它“顶”出来，而那条占位料会混进物料列表、还白占一条库存预警
+ * （2026-09-29 就建过「节能炉车间/工程车间/西厨车间」3 条占位物料，后来全被软删了）。
+ *
+ * 2026-10-21 用户要在「成品仓物料」页加「非标定制车间」→ 改成「已有 ∪ 固定候选」：
+ * 新车间立刻可选，又不产生假物料。以后真要加/改车间，只改这里一处。
+ *
+ * ⚠️ 只对仓库 code = 'chengpin' 生效。
+ *   配件仓的 sub_category 是编号类目（A001…），混进来会彻底跑偏。
+ */
+const CHENG_PIN_WORKSHOPS = ['工程车间', '节能炉车间', '西厨车间', '非标定制车间']
+
+/**
  * 物料分类列表（供筛选下拉使用）
  *   list          —— 大类（配件 / 成品）
  *   subCategories —— 细分类（成品仓=车间，配件仓=编号类目）
@@ -444,6 +460,19 @@ async function categories(ctx, data = {}) {
     subMap[p.c].push(p.s)
   }
   for (const k of Object.keys(subMap)) subMap[k].sort()
+
+  // ---------- 成品仓：把固定车间候选并进来（理由见 CHENG_PIN_WORKSHOPS 注释） ----------
+  const wid = await resolveWarehouseId(data.warehouse_id)
+  const wh = wid ? await queryOne('SELECT code FROM warehouses WHERE id = ? AND is_deleted = 0', [wid]) : null
+  if (wh && wh.code === 'chengpin') {
+    const merged = [...new Set([...subCategories, ...CHENG_PIN_WORKSHOPS])].sort()
+    // 成品仓的大类恒为「成品」（一个仓一个大类），直接把候选挂到它下面，
+    // 否则建档页选完「成品」大类后，车间下拉会缺这几个还没物料的车间
+    const KEY = '成品'
+    const existKey = Object.keys(subMap).find((k) => k === KEY) || KEY
+    const mergedMap = [...new Set([...(subMap[existKey] || []), ...CHENG_PIN_WORKSHOPS])].sort()
+    return ok({ list, subCategories: merged, subMap: { ...subMap, [existKey]: mergedMap } })
+  }
 
   return ok({ list, subCategories, subMap })
 }
