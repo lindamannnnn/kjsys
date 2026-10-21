@@ -9,6 +9,33 @@ const { ok, fail, errors } = require('../utils/response')
 const { toApi, num, paging } = require('../utils/format')
 const { code2session, isDevLoginAllowed } = require('../services/wechat')
 const { signToken, displayName } = require('../middleware/auth')
+const { visibleWarehouseIds } = require('../services/warehouse')
+
+/**
+ * 「我管哪些仓」的仓库编码（给前端做菜单 / 路由守卫的仓库门）
+ * ------------------------------------------------------------
+ * 口径与 services/warehouse.js 的 visibleWarehouseIds 完全一致，不另立一套：
+ *   null        → 不隔离（admin / boss，或用户没配 warehouse_ids）
+ *   ['chengpin']→ 只管成品仓
+ *
+ * ⚠️ 为什么要在登录时就算好，而不是让前端自己拼：
+ *   前端原来要靠「第二次请求 warehouse.list → 用 warehouse_ids 去匹配 code」，
+ *   于是有两个失效窗口：
+ *     ① 那次请求还没回来 / 失败 → 前端退回「不隔离」，菜单全显示；
+ *     ② localStorage 里的 user_info 是旧快照（后台改了仓库但用户没重登）→ 永远按旧的算。
+ *   实测症状：成品仓管看到「配件仓物料」菜单、左上角显示「仓库后台」而不是「成品仓后台」。
+ *   这里由服务端一次算好随登录返回，前端不再依赖第二个请求，也不会被旧快照带偏。
+ */
+async function warehouseCodesOf(user) {
+  const ids = visibleWarehouseIds(user)
+  if (ids === null) return null // 不隔离
+  if (!ids.length) return []
+  const rows = await query(
+    `SELECT code FROM warehouses WHERE is_deleted = 0 AND id IN (${ids.map(() => '?').join(',')})`,
+    ids
+  )
+  return rows.map((r) => r.code).filter(Boolean)
+}
 
 /** 写操作日志 */
 async function writeOpLog(p) {
@@ -179,7 +206,10 @@ async function getUserInfo(ctx) {
   if (!ctx.user) return fail(401, '请先登录')
   const user = await queryOne('SELECT * FROM users WHERE id = ?', [ctx.user.id])
   if (!user) return fail(404, '用户不存在')
-  return ok(toApi(user))
+  const api = toApi(user)
+  // 每次拉用户信息都重新算一遍 → 后台改了仓库 / 角色，前端刷新页面就生效，不用重登
+  api.warehouse_codes = await warehouseCodesOf(user)
+  return ok(api)
 }
 
 /**
@@ -228,6 +258,7 @@ async function adminLogin(ctx, data = {}) {
   })
 
   const apiUser = toApi(user)
+  apiUser.warehouse_codes = await warehouseCodesOf(user)
   const mustChange = Number(user.must_change_password) === 1
 
   return ok({

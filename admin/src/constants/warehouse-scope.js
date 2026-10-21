@@ -19,11 +19,32 @@ export const WAREHOUSE_CACHE_KEY = 'warehouse_codes'
 
 /**
  * 算出「自己能看的仓库 code 数组」。
- * @param {object} userInfo  登录返回的用户信息（含 warehouse_ids）
+ * @param {object} userInfo  登录返回的用户信息（含 warehouse_codes / warehouse_ids）
  * @param {Array}  warehouses  warehouse.list 返回的仓库数组（已按 warehouse_ids 过滤过）
  * @returns {string[]|null}   null = 不隔离 / 无法判定
  */
 export function resolveWarehouseCodes(userInfo, warehouses) {
+  /*
+   * 首选：后端在登录 / getUserInfo 里直接算好的 warehouse_codes。
+   * 语义由后端定：null = 不隔离（admin/boss，或没配仓库），数组 = 只管这些仓。
+   *
+   * ⚠️ 为什么不能只靠下面的「warehouse_ids ⇄ warehouse.list 匹配」：
+   *   那条路依赖**第二个请求**和**localStorage 里的 userInfo 快照**，有两个失效窗口：
+   *     ① warehouse.list 还没回来 / 失败 → 这里返回 null → 菜单整块不隔离 → 成品仓管看到「配件仓物料」
+   *     ② 后台改了某人的仓库，但浏览器里还是登录时的旧快照 → 按旧值算，永远不更新
+   *   实测症状就是「成品仓管看得到配件仓物料、左上角显示仓库后台」。
+   *   后端算好后一次拿到，这两个窗口都不存在。
+   */
+  if (userInfo && Object.prototype.hasOwnProperty.call(userInfo, 'warehouse_codes')) {
+    const given = userInfo.warehouse_codes
+    if (given === null) return null // 后端明确说「不隔离」
+    if (Array.isArray(given) && given.length) return given.filter(Boolean)
+    // 后端给了空数组 = 配了 warehouse_ids 但一个仓都对不上 → 按不隔离兜底
+    // （宁可多显示一个入口，也不要把人挡在门外；真正的防线是后端 requireWarehouseAccess）
+    return null
+  }
+
+  // 兼容旧数据（本地缓存里没有 warehouse_codes 字段时走原逻辑）
   const ids = Array.isArray(userInfo && userInfo.warehouse_ids)
     ? userInfo.warehouse_ids.map(Number).filter(Boolean)
     : []

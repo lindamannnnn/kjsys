@@ -616,7 +616,14 @@ module.exports = {
     // 2026-10-09：老板只读，物料档案维护收回 boss
     upsert: ['admin', 'storekeeper', 'director'],
     import: ['admin'],
-    delete: ['admin'],
+    // 删除物料：2026-10-21 按用户要求把权限下放到仓管（原先只有 admin）。
+    // ⚠️ 放开的只是「角色门」，下面 remove() 里还有两道硬门，缺一不可：
+    //   ① requireWarehouseAccess → 只能删自己管的仓
+    //   ② current_stock !== 0 → 直接拒（有库存的物料永远删不掉，必须先出库/盘亏清零）
+    //   ③ 软删除（is_deleted=1），历史流水全留 —— 删错了可从库里恢复
+    // ⚠️ 厂长仍不给：这是既有设计（见 memory/角色与权限.md），
+    //    tests/role-agent/director-check.js 有断言「material.delete 被拒」，别顺手放开。
+    delete: ['admin', 'storekeeper'],
     // 期初建账：一次性初始化动作，不属于「日常业务操作」。
     // setOpeningMode 需要 admin/boss（开关只在这两者手上）；
     // setOpening 的口径见文件内 OPENING_ROLES 的注释 —— 必须与 /material/edit 页角色对齐。

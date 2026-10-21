@@ -58,10 +58,10 @@
         <div class="card-header">
           <span>{{ listTitle }}</span>
           <div>
-            <el-button size="small" @click="goImport">
+            <el-button v-if="canImportMaterial" size="small" @click="goImport">
               <el-icon><Upload /></el-icon>批量导入
             </el-button>
-            <el-button type="primary" size="small" @click="handleAdd">
+            <el-button v-if="canEditMaterial" type="primary" size="small" @click="handleAdd">
               <el-icon><Plus /></el-icon>新增物料
             </el-button>
           </div>
@@ -127,10 +127,25 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" :width="canDeleteMaterial ? 180 : 110" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canEditMaterial" type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+            <!-- 删除：库存为 0 才可点（后端同样校验），无权限的角色整块不显示 -->
+            <el-tooltip
+              v-if="canDeleteMaterial"
+              :content="deleteBlockedReason(row)"
+              :disabled="!deleteBlockedReason(row)"
+              placement="top"
+            >
+              <span>
+                <el-button
+                  type="danger"
+                  size="small"
+                  :disabled="!!deleteBlockedReason(row)"
+                  @click="handleDelete(row)"
+                >删除</el-button>
+              </span>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -167,6 +182,24 @@ const userStore = useUserStore()
  * 后端 material.list 对仓管也已脱敏，这里是「不显示空列」的体验层。
  */
 const canSeeCost = computed(() => canViewCost(userStore.roles || []))
+
+/**
+ * 三个操作按钮的显隐，必须与后端 roleRules 一一对齐（否则就是「摆一个点了必 403 的按钮」）：
+ *   新增 / 编辑 → material.upsert = admin / storekeeper / director（也等于 /material/edit 页的角色）
+ *   删除        → material.delete = admin / storekeeper（2026-10-21 下放到仓管）
+ *   批量导入    → material.import = 仅 admin
+ * ⚠️ 改后端权限时这三个 computed 要一起改，见 server/src/modules/material.js 的 roleRules。
+ */
+const canEditMaterial = computed(() => userStore.hasRole('admin', 'storekeeper', 'director'))
+const canDeleteMaterial = computed(() => userStore.hasRole('admin', 'storekeeper'))
+const canImportMaterial = computed(() => userStore.hasRole('admin'))
+
+/** 有库存的物料删不掉（后端 remove() 里也会拒），按钮直接置灰并说明原因 */
+function deleteBlockedReason(row) {
+  if (!canDeleteMaterial.value) return '只有管理员和仓管可以删除物料'
+  const stock = Number(row.current_stock || 0)
+  return stock !== 0 ? `当前库存为 ${stock}，需先出库/盘亏清零后才能删除` : ''
+}
 
 const route = useRoute()
 const router = useRouter()
